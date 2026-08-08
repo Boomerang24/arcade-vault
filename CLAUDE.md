@@ -16,16 +16,10 @@ npx skills@latest add Klerith/fernando-skills
 
 When implementing features, check whether `/spec` and `/spec-impl` skills are available and use them rather than jumping straight to code.
 
-## Commands
-
-```bash
-npm run dev      # start dev server (Next.js, Turbopack by default in this version)
-npm run build    # production build
-npm run start    # run production build
-npm run lint     # eslint via eslint.config.mjs (flat config, eslint-config-next)
-```
-
 There is no test runner configured yet.
+
+## Skills
+Use siempre /frontend-design para diseñar la interfaz de usuario.
 
 ## Architecture
 
