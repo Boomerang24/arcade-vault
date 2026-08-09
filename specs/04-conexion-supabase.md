@@ -13,7 +13,7 @@
 - Instalar las dependencias `@supabase/supabase-js` y `@supabase/ssr`.
 - Cliente de browser: `lib/supabase/client.ts`, exporta una función `createClient()` que usa `createBrowserClient(url, anonKey)` de `@supabase/ssr`.
 - Cliente de servidor: `lib/supabase/server.ts`, exporta una función async `createClient()` que usa `createServerClient` de `@supabase/ssr` con el manejo de cookies de `next/headers`, para uso en Server Components y Route Handlers.
-- Variables de entorno `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`:
+- Variables de entorno `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`:
   - Añadidas sin valores a `.env.template` (versionado).
   - Añadidas con los valores reales del proyecto a `.env.local` (no versionado; el usuario completa los valores manualmente después de la implementación).
 - Ruta de verificación temporal `app/api/health/supabase/route.ts` (`GET`): instancia el cliente de servidor, llama a `supabase.auth.getSession()`, y responde `200 { ok: true }` si no hay error, o `500 { ok: false, error }` si falla (por ejemplo, env vars faltantes o URL inválida).
@@ -35,8 +35,8 @@ No se introducen estructuras de datos ni tablas en Supabase. Este spec solo conf
 ## Plan de implementación
 
 1. **Instalar dependencias.** `npm install @supabase/supabase-js @supabase/ssr`.
-2. **Variables de entorno.** Agregar `NEXT_PUBLIC_SUPABASE_URL=` y `NEXT_PUBLIC_SUPABASE_ANON_KEY=` a `.env.template` (sin valores). Agregar ambas a `.env.local` con los valores reales del proyecto (el usuario los completa).
-3. **Cliente de browser.** Crear `lib/supabase/client.ts` con `createClient()` usando `createBrowserClient` de `@supabase/ssr`, leyendo `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+2. **Variables de entorno.** Agregar `NEXT_PUBLIC_SUPABASE_URL=` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=` a `.env.template` (sin valores). Agregar ambas a `.env.local` con los valores reales del proyecto (el usuario los completa).
+3. **Cliente de browser.** Crear `lib/supabase/client.ts` con `createClient()` usando `createBrowserClient` de `@supabase/ssr`, leyendo `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
 4. **Cliente de servidor.** Crear `lib/supabase/server.ts` con una función async `createClient()` usando `createServerClient` de `@supabase/ssr`, integrando `cookies()` de `next/headers` según el patrón oficial de Supabase para Next.js App Router.
 5. **Ruta de verificación.** Crear `app/api/health/supabase/route.ts` (`GET`): instancia el cliente de servidor, llama `supabase.auth.getSession()`, responde `{ ok: true }` (200) si no hay error o `{ ok: false, error }` (500) si falla.
 6. **Revisión final.** Con `.env.local` configurado, visitar `/api/health/supabase` y confirmar `{ ok: true }`. Correr `npm run build` y confirmar que no hay errores de tipos ni de build.
@@ -46,7 +46,7 @@ No se introducen estructuras de datos ni tablas en Supabase. Este spec solo conf
 - [ ] `@supabase/supabase-js` y `@supabase/ssr` están declarados en `package.json`.
 - [ ] `lib/supabase/client.ts` exporta un cliente de Supabase utilizable desde componentes cliente.
 - [ ] `lib/supabase/server.ts` exporta un cliente de Supabase utilizable desde Server Components y Route Handlers, usando cookies de `next/headers`.
-- [ ] `.env.template` documenta `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY` sin valores.
+- [ ] `.env.template` documenta `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` sin valores.
 - [ ] Con `.env.local` configurado con credenciales reales, `GET /api/health/supabase` responde `200 { ok: true }`.
 - [ ] Si las variables de entorno faltan o son inválidas, `/api/health/supabase` responde con un error claro (`ok: false`) en vez de lanzar una excepción no controlada.
 - [ ] `npm run build` completa sin errores de tipos ni de build.
@@ -59,7 +59,8 @@ No se introducen estructuras de datos ni tablas en Supabase. Este spec solo conf
 - **Clientes separados de browser y de servidor**, en vez de un cliente único compartido. Es el patrón oficial recomendado por Supabase para Next.js App Router: el manejo de cookies difiere entre cliente y servidor.
 - **Ruta de verificación temporal (`app/api/health/supabase/route.ts`)**, en vez de confiar solo en `npm run build`. Permite confirmar en runtime que la URL y la anon key son válidas y que el proyecto responde, no solo que el código compila.
 - **Sin `middleware.ts` de refresco de sesión.** No aplica todavía porque no hay login real; se agrega junto con el spec de autenticación.
-- **No se crea ningún proyecto nuevo en Supabase.** El usuario ya tiene uno creado y proveerá `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_ANON_KEY` manualmente en `.env.local`.
+- **No se crea ningún proyecto nuevo en Supabase.** El usuario ya tiene uno creado y proveerá `NEXT_PUBLIC_SUPABASE_URL` / `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` manualmente en `.env.local`.
+- **`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` en vez de `NEXT_PUBLIC_SUPABASE_ANON_KEY`.** Durante el Paso 2 se detectó que `.env.local` ya traía la key en el formato moderno de Supabase (`sb_publishable_...`, guardada como `PUBLISHABLE_KEY`) en vez de la legacy anon/JWT key. Se decidió respetar ese nombre en vez de renombrar la variable, y usarlo también en `.env.template` y en los clientes.
 
 ## Riesgos identificados
 
