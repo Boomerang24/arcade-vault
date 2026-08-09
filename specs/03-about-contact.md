@@ -1,6 +1,6 @@
 # 03 — About / Contacto
 
-**Estado:** Approved
+**Estado:** Implemented
 **Depende de:** SPEC 02
 **Fecha:** 2026-08-08
 
@@ -35,7 +35,7 @@
   - `RESEND_API_KEY`: API key de Resend.
   - `CONTACT_TO_EMAIL`: correo destino de las notificaciones de contacto (valor a usar: `alx2495dev@gmail.com`).
 - `.env.template` (versionado, exceptuado en `.gitignore` vía `!.env.template`) con ambas claves sin valores, como referencia para quien clone el repo.
-- Actualizar `components/nav.tsx`: agregar `<Link href="/about">Acerca de</Link>` (desktop + panel móvil), entre "Salón de la Fama" y el botón de autenticación; nuevo `isAbout = pathname === "/about"` para el estado activo.
+- Actualizar `components/nav.tsx`: agregar `<Link href="/about">Sobre nosotros</Link>` (desktop + panel móvil), entre "Salón de la Fama" y el botón de autenticación; nuevo `isAbout = pathname === "/about"` para el estado activo.
 - Portar los estilos nuevos de `references/templates/home-about/styles.css` relacionados a about/contacto (`.about`, `.about-hero`, `.about-title`, `.about-mission`, `.highlight-row`, `.highlight`, `.hl-icon`, `.hl-text`, `.about-divider`, `.div-bar`, `.div-pixels`, `.about-contact`, `.contact-grid`, `.contact-intro`, `.contact-title`, `.contact-sub`, `.contact-tips`, `.contact-form`, `.contact-form.shake`, `.terminal-success`, `.term-bar`, `.term-body`, etc.) a `app/globals.css`, resolviendo colisiones de nombres con lo ya portado en specs 01/02 si las hubiera.
 
 **No incluye (fuera de alcance):**
@@ -56,8 +56,8 @@ No se introducen estructuras de datos persistentes. El payload del formulario (`
 3. **API Route.** Crear `app/api/contact/route.ts`: valida `name`/`email`/`msg` no vacíos, instancia `Resend` con `process.env.RESEND_API_KEY`, envía el correo a `process.env.CONTACT_TO_EMAIL` desde `onboarding@resend.dev` con `replyTo` del remitente, devuelve `{ ok: true }` o `{ ok: false, error }` según el resultado.
 4. **Estilos de about/contacto.** Portar las reglas relevantes de `references/templates/home-about/styles.css` (listadas en el alcance) a `app/globals.css`, verificando colisiones con clases existentes.
 5. **Componente About.** Crear `app/about/page.tsx` (cliente) con el contenido portado de `about.jsx`: `HighlightIcon`, hook `useReveal` (reutilizando el mismo patrón de spec 02), secciones hero/divider/contact. El formulario usa `fetch("/api/contact", { method: "POST", body: JSON.stringify({ name, email, msg }) })` con estados `idle | loading | success | error`.
-6. **Actualizar Nav.** En `components/nav.tsx`: agregar `<Link href="/about">Acerca de</Link>` (desktop y móvil) con `isAbout = pathname === "/about"`.
-7. **Revisión final.** Recorrer en el navegador: `/about` (hero, highlight-row, divider animado, formulario), enviar formulario con campos vacíos (shake, sin llamada a red), enviar formulario válido (loading → éxito si `RESEND_API_KEY` está configurada, o error visible si no lo está/falla), nav muestra "Acerca de" con estado activo correcto, ningún error de hidratación o consola.
+6. **Actualizar Nav.** En `components/nav.tsx`: agregar `<Link href="/about">Sobre nosotros</Link>` (desktop y móvil) con `isAbout = pathname === "/about"`.
+7. **Revisión final.** Recorrer en el navegador: `/about` (hero, highlight-row, divider animado, formulario), enviar formulario con campos vacíos (shake, sin llamada a red), enviar formulario válido (loading → éxito si `RESEND_API_KEY` está configurada, o error visible si no lo está/falla), nav muestra "Sobre nosotros" con estado activo correcto, ningún error de hidratación o consola.
 
 ## Criterios de aceptación
 
@@ -70,7 +70,7 @@ No se introducen estructuras de datos persistentes. El payload del formulario (`
 - [ ] `app/api/contact/route.ts` rechaza (`4xx`) requests con `name`, `email` o `msg` vacíos sin llamar a Resend.
 - [ ] `app/api/contact/route.ts` usa `process.env.RESEND_API_KEY` y `process.env.CONTACT_TO_EMAIL` (ninguno hardcodeado) y envía el correo con `replyTo` igual al correo del formulario.
 - [ ] `.env.template` (versionado) documenta `RESEND_API_KEY` y `CONTACT_TO_EMAIL` sin valores; `.env.local` (no versionado) contiene los valores reales.
-- [ ] El nav (desktop y menú móvil) muestra "Acerca de" apuntando a `/about`, activo solo en esa ruta.
+- [ ] El nav (desktop y menú móvil) muestra "Sobre nosotros" apuntando a `/about`, activo solo en esa ruta.
 - [ ] No hay errores de hidratación ni de consola al cargar `/about`.
 
 ## Decisiones tomadas y descartadas
@@ -78,7 +78,7 @@ No se introducen estructuras de datos persistentes. El payload del formulario (`
 - **API Route (`app/api/contact/route.ts`) en vez de Server Action.** Mantiene la API key de Resend estrictamente en servidor y sigue el patrón explícito de fetch desde el cliente, más fácil de depurar (status code, body de error) que una Server Action con `useTransition`.
 - **`onboarding@resend.dev` como remitente en vez de dominio propio.** No hay dominio verificado en Resend todavía; permite enviar correos de inmediato sin configurar DNS. Migrar a un dominio propio queda para un spec futuro si se decide.
 - **Agregar loading + error real al formulario, en vez de mantener el comportamiento estático del template.** Como ahora el envío es real (vía Resend), el usuario necesita saber si el correo realmente se envió o si falló, a diferencia del template que solo simulaba el éxito.
-- **Agregar el link "Acerca de" al nav ahora**, revirtiendo la decisión de spec 02 de omitirlo. En spec 02 `/about` no existía todavía; ahora que se implementa, el link debe ser visible.
+- **Agregar el link "Sobre nosotros" al nav ahora**, revirtiendo la decisión de spec 02 de omitirlo. En spec 02 `/about` no existía todavía; ahora que se implementa, el link debe ser visible.
 - **`RESEND_API_KEY` en `.env.local` sin valor, a completar por el usuario.** El usuario proveerá su propia API key después de la implementación; el código solo debe leer `process.env.RESEND_API_KEY`.
 - **`CONTACT_TO_EMAIL` como variable de entorno en vez de hardcodear `alx2495dev@gmail.com` en el código.** Permite cambiar el destinatario sin tocar código y evita versionar la dirección real en `.env.template`; el valor concreto vive solo en `.env.local`.
 - **No hay persistencia de mensajes ni protección anti-spam.** Fuera de alcance por ahora: el template no la define y no fue solicitada explícitamente; se puede añadir en un spec futuro si se detecta abuso.

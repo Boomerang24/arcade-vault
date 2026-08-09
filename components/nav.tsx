@@ -38,7 +38,7 @@ export function Nav() {
             Salón de la Fama
           </Link>
           <Link href="/about" className={isAbout ? "active" : ""}>
-            Acerca de
+            Sobre nosotros
           </Link>
         </div>
         <div className="spacer" />
@@ -78,7 +78,7 @@ export function Nav() {
           Salón de la Fama
         </Link>
         <Link href="/about" className={isAbout ? "active" : ""} onClick={close}>
-          Acerca de
+          Sobre nosotros
         </Link>
         <Link href="/iniciar-sesion" className={isAuth ? "active" : ""} onClick={close}>
           {user ? "Cuenta" : "Iniciar Sesión"}
