@@ -1,6 +1,6 @@
 # 04 — Conexión con Supabase
 
-**Estado:** Approved
+**Estado:** Implemented
 **Depende de:** Ninguno
 **Fecha:** 2026-08-08
 
