@@ -1,0 +1,52 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0d0d1a;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+#game-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+
+#hud {
+  display: flex;
+  justify-content: space-between;
+  width: 640px;
+  color: #f0f0f0;
+  font-size: 1.1rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+#lives-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+}
+
+.life-icon {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #ffffff, #4ad1ff 60%, #1a7fae 100%);
+  box-shadow: inset -2px -2px 2px rgba(0, 0, 0, 0.4);
+}
+
+#game-canvas {
+  background: #808080;
+  border: 2px solid #4a4a6a;
+  display: block;
+}
