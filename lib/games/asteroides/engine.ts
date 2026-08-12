@@ -244,7 +244,6 @@ class Particle {
   }
 }
 export class AsteroidesEngine {
-  private canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D;
   private callbacks: EngineCallbacks;
   private keys: Record<string, boolean> = {};
@@ -262,7 +261,6 @@ export class AsteroidesEngine {
   private rafId: number | null = null;
   private paused = false;
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
-    this.canvas = canvas;
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("No se pudo obtener el contexto 2D del canvas");
     this.ctx = ctx;
