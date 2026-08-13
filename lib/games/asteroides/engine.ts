@@ -440,7 +440,6 @@ export class AsteroidesEngine {
     }
   }
   private loop = (ts: number) => {
-    if (this.paused) return;
     const dt =
       this.lastTime === null ? 0 : Math.min((ts - this.lastTime) / 1000, 0.05);
     this.lastTime = ts;
@@ -452,7 +451,9 @@ export class AsteroidesEngine {
       level: this.level,
       state: this.state,
     });
-    this.rafId = requestAnimationFrame(this.loop);
+    if (!this.paused) {
+      this.rafId = requestAnimationFrame(this.loop);
+    }
   };
   pause(): void {
     if (this.paused) return;
@@ -482,6 +483,13 @@ export class AsteroidesEngine {
     this.ship.dead = true;
     this.lives = 0;
     this.state = "gameover";
+    this.draw();
+    this.callbacks.onStats({
+      score: this.score,
+      lives: this.lives,
+      level: this.level,
+      state: this.state,
+    });
     this.callbacks.onGameOver(this.score);
   }
   destroy(): void {
