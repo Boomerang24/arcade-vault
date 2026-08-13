@@ -1,6 +1,6 @@
 # 06 — Tablas reales de juegos y leaderboard en Supabase
 
-**Estado:** Approved
+**Estado:** Implemented
 **Depende de:** SPEC 04
 **Fecha:** 2026-08-12
 
@@ -10,7 +10,7 @@
 
 **Incluye:**
 
-- Tabla `games` en Supabase: una fila por juego, con las mismas columnas que el tipo `Game` actual (`id` como texto/slug primary key, `title`, `short`, `long`, `cat`, `cover`, `color`, `best`, `plays`). Sembrada por migración con los 9 juegos que hoy viven en `GAMES` (`lib/data.ts`), datos idénticos (mismos ids, textos, `best`/`plays`).
+- Tabla `games` en Supabase: una fila por juego, con las mismas columnas que el tipo `Game` actual (`id` como texto/slug primary key, `title`, `short`, `long`, `cat`, `cover`, `color`, `best`, `plays`). Sembrada por migración únicamente con `asteroides` — el único juego de los 9 originales de `GAMES` (`lib/data.ts`) con un motor realmente implementado. El resto de juegos no se siembran: no tienen mecánica funcional detrás.
 - Tabla `scores` en Supabase: `id` (uuid/serial), `game_id` (texto, FK a `games.id`), `name` (texto), `score` (entero), `created_at` (timestamp, default now). Arranca vacía — no se siembra con datos de ejemplo.
 - RLS habilitado en ambas tablas con policies públicas: `SELECT` público en `games` y `scores`, `INSERT` público en `scores` (sin auth real todavía, igual que hoy cualquiera guarda con cualquier nombre).
 - Nuevo módulo de acceso a datos server-side (p. ej. `lib/games.ts`, `lib/scores.ts`) con funciones async que usan `lib/supabase/server.ts`: `getGames()`, `getGame(id)`, `getTopScores(gameId, limit)`, `getAllTopScores(limit)` (para el salón de la fama, todas las listas por juego en una sola carga).
@@ -64,7 +64,7 @@ create policy "scores are publicly readable" on scores for select using (true);
 create policy "anyone can insert a score" on scores for insert with check (true);
 
 insert into games (id, title, short, long, cat, cover, color, best, plays) values
-  (...); -- una fila por cada uno de los 9 juegos actuales de GAMES en lib/data.ts
+  ('asteroides', 'ASTEROIDES', ..., 'SHOOTER', 'cover-rocas', 'yellow', 38700, '11.3K'); -- único juego sembrado; el resto del catálogo mock no tiene motor implementado
 ```
 
 Tipos TypeScript (nuevo módulo, p. ej. `lib/games.ts` / `lib/scores.ts`), reemplazando el `Game` estático y `seededScores` de `lib/data.ts`:
@@ -117,8 +117,8 @@ export async function getAllTopScores(
 ## Criterios de aceptación
 
 - [ ] Las tablas `games` y `scores` existen en Supabase con las columnas, constraints y policies RLS descritas arriba.
-- [ ] `games` contiene los 9 juegos actuales con los mismos ids, textos, `cat`, `color`, `cover`, `best` y `plays` que hoy en `GAMES`.
-- [ ] `/` (biblioteca) muestra el grid de juegos leyendo de Supabase, con buscador y filtro por categoría funcionando igual que antes.
+- [ ] `games` contiene únicamente `asteroides`, con los mismos textos, `cat`, `color`, `cover`, `best` y `plays` que tenía en `GAMES`.
+- [ ] `/` (biblioteca) muestra el grid de juegos leyendo de Supabase (solo `asteroides`), con buscador y filtro por categoría funcionando igual que antes.
 - [ ] `/juego/[id]` muestra el detalle leyendo `getGame`/`getTopScores`; un `id` inexistente sigue devolviendo 404.
 - [ ] `/juego/[id]/jugar` → guardar puntuación en el modal inserta una fila real en `scores` (visible después en Supabase) y no en `localStorage`.
 - [ ] La puntuación guardada aparece tanto en el leaderboard de `/juego/[id]` como en `/salon-de-la-fama` (mismo juego, mismo score/nombre), ordenada de mayor a menor.
@@ -136,6 +136,7 @@ export async function getAllTopScores(
 - **Lectura y escritura públicas vía RLS (sin Route Handler intermedio).** Decisión explícita del usuario: coherente con que hoy cualquiera guarda un score con cualquier nombre sin validación; se simplifica evitando una capa de API adicional.
 - **Fetch de `games`/`scores` en Server Components padres, con subcomponentes cliente para la interactividad** (`biblioteca-client.tsx`, `salon-client.tsx`), en vez de `useEffect` + cliente de browser. Decisión explícita del usuario: evita un salto de carga visible que hoy no existe con los datos mock, y es consistente con que `/juego/[id]` ya es Server Component.
 - **`lib/games.ts`/`lib/scores.ts` como módulos separados de `lib/data.ts`**, en vez de mantener todo en `lib/data.ts`. Separa claramente los datos que siguen siendo estáticos (si los hubiera) de las funciones que ahora hacen I/O async a Supabase.
+- **`games` solo contiene `asteroides`, no los 9 juegos del mock.** Decisión explícita del usuario, tomada tras la implementación inicial: de los 9 juegos de `GAMES`, solo `asteroides` tiene un motor jugable real; el resto son placeholders visuales sin mecánica. Se eliminaron de la tabla `games` (no se sembraron) para que la biblioteca y el salón de la fama no anuncien juegos que no existen. Ampliar el catálogo real es trabajo de specs futuros, uno por motor de juego implementado.
 
 ## Riesgos identificados
 
