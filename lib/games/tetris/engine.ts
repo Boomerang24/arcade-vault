@@ -70,11 +70,11 @@ const PIECES: Array<number[][] | null> = [
     [7, 7, 7],
     [0, 0, 0],
   ], // L
-  [
-    [8, 8, 8],
-    [8, 0, 8],
-    [8, 8, 8],
-  ], // N - tuerca
+  // [
+  //   [8, 8, 8],
+  //   [8, 0, 8],
+  //   [8, 8, 8],
+  // ], // N - tuerca
 ];
 const SKIN_PALETTES: Record<SkinName, Array<string | null>> = {
   retro: COLORS,
