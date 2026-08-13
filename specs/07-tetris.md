@@ -1,6 +1,6 @@
 # 07 — Juego: Tetris
 
-**Estado:** Approved
+**Estado:** Implemented
 **Depende de:** SPEC 05, SPEC 06
 **Fecha:** 2026-08-13
 
