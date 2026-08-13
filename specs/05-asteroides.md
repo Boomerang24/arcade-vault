@@ -1,6 +1,6 @@
 # 05 — Juego: Asteroides
 
-**Estado:** Approved
+**Estado:** Implemented
 **Depende de:** SPEC 01
 **Fecha:** 2026-08-12
 
