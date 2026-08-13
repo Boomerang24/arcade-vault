@@ -74,7 +74,7 @@ const PIECES: Array<number[][] | null> = [
   //   [8, 8, 8],
   //   [8, 0, 8],
   //   [8, 8, 8],
-  // ], // N - tuerca
+  // ], // N - tuerca (deshabilitada por ahora, ver randomPiece)
 ];
 const SKIN_PALETTES: Record<SkinName, Array<string | null>> = {
   retro: COLORS,
@@ -271,7 +271,8 @@ export class TetrisEngine {
     return 8 + Math.floor(Math.random() * 8);
   }
   private randomPiece(isSpecial: boolean): Piece {
-    const type = Math.floor(Math.random() * 8) + 1;
+    // Tope en 7: la pieza N (tuerca, índice 8) está deshabilitada arriba en PIECES.
+    const type = Math.floor(Math.random() * 7) + 1;
     const shape = PIECES[type]!.map((row) => [...row]);
     const special = isSpecial
       ? POWERUP_TYPES[Math.floor(Math.random() * POWERUP_TYPES.length)]
