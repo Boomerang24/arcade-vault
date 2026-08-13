@@ -30,7 +30,6 @@ const SKINS: { value: SkinName; label: string }[] = [
 export const TetrisCanvas = forwardRef<TetrisCanvasHandle, TetrisCanvasProps>(
   function TetrisCanvas({ onStats, onGameOver }, ref) {
     const boardRef = useRef<HTMLCanvasElement>(null);
-    const holdRef = useRef<HTMLCanvasElement>(null);
     const nextRef = useRef<HTMLCanvasElement>(null);
     const engineRef = useRef<TetrisEngine | null>(null);
     const onStatsRef = useRef(onStats);
@@ -39,11 +38,10 @@ export const TetrisCanvas = forwardRef<TetrisCanvasHandle, TetrisCanvasProps>(
     onGameOverRef.current = onGameOver;
     const [skin, setSkin] = useState<SkinName>("retro");
     useEffect(() => {
-      if (!boardRef.current || !holdRef.current || !nextRef.current) return;
+      if (!boardRef.current || !nextRef.current) return;
       const engine = new TetrisEngine(
         {
           board: boardRef.current,
-          hold: holdRef.current,
           next: nextRef.current,
         },
         {
@@ -125,28 +123,6 @@ export const TetrisCanvas = forwardRef<TetrisCanvasHandle, TetrisCanvasProps>(
                 </option>
               ))}
             </select>
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span
-              className="mono"
-              style={{
-                fontSize: 10,
-                letterSpacing: "0.16em",
-                color: "var(--ink-dim)",
-              }}
-            >
-              HOLD
-            </span>
-            <canvas
-              ref={holdRef}
-              width={120}
-              height={120}
-              style={{
-                background: "rgba(0,0,0,0.6)",
-                border: "1px solid var(--ink-dim)",
-                borderRadius: 4,
-              }}
-            />
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
             <span

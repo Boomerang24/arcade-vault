@@ -13,7 +13,6 @@ export type EngineCallbacks = {
 };
 export type TetrisCanvases = {
   board: HTMLCanvasElement;
-  hold: HTMLCanvasElement;
   next: HTMLCanvasElement;
 };
 export type SkinName = "retro" | "neon" | "pastel" | "pixelart";
@@ -127,16 +126,12 @@ type FloatingText = {
 };
 export class TetrisEngine {
   private boardCtx: CanvasRenderingContext2D;
-  private holdCtx: CanvasRenderingContext2D;
   private nextCtx: CanvasRenderingContext2D;
-  private holdCanvas: HTMLCanvasElement;
   private nextCanvas: HTMLCanvasElement;
   private callbacks: EngineCallbacks;
   private board!: number[][];
   private current!: Piece;
   private next!: Piece;
-  private hold: PieceLike | null = null;
-  private holdLocked = false;
   private score = 0;
   private lines = 0;
   private level = 1;
@@ -154,15 +149,12 @@ export class TetrisEngine {
   private audioCtx: AudioContext | null = null;
   constructor(canvases: TetrisCanvases, callbacks: EngineCallbacks) {
     const boardCtx = canvases.board.getContext("2d");
-    const holdCtx = canvases.hold.getContext("2d");
     const nextCtx = canvases.next.getContext("2d");
-    if (!boardCtx || !holdCtx || !nextCtx) {
+    if (!boardCtx || !nextCtx) {
       throw new Error("No se pudo obtener el contexto 2D de los canvases");
     }
-    this.holdCanvas = canvases.hold;
     this.nextCanvas = canvases.next;
     this.boardCtx = boardCtx;
-    this.holdCtx = holdCtx;
     this.nextCtx = nextCtx;
     this.callbacks = callbacks;
     window.addEventListener("keydown", this.handleKeyDown);
@@ -176,10 +168,6 @@ export class TetrisEngine {
       "ArrowDown",
       "ArrowUp",
       "Space",
-      "KeyX",
-      "KeyC",
-      "ShiftLeft",
-      "ShiftRight",
     ];
     if (capturedCodes.includes(e.code)) e.preventDefault();
     if (this.paused || this.state === "gameover") return;
@@ -200,16 +188,10 @@ export class TetrisEngine {
         this.softDrop();
         break;
       case "ArrowUp":
-      case "KeyX":
         this.tryRotate();
         break;
       case "Space":
         this.hardDrop();
-        break;
-      case "KeyC":
-      case "ShiftLeft":
-      case "ShiftRight":
-        this.holdPiece();
         break;
     }
   };
@@ -489,40 +471,10 @@ export class TetrisEngine {
     this.current = this.next;
     this.next = this.randomPiece(this.nextIsSpecial);
     this.nextIsSpecial = false;
-    this.holdLocked = false;
     if (this.collide(this.current.shape, this.current.x, this.current.y)) {
       this.endGame();
     }
     this.drawNext();
-  }
-  private holdPiece() {
-    if (this.holdLocked) return;
-    const spawnShape = (t: number) => PIECES[t]!.map((row) => [...row]);
-    const spawnX = (t: number) =>
-      Math.floor(COLS / 2) - Math.floor(spawnShape(t)[0].length / 2);
-    const heldFromCurrent: PieceLike = {
-      type: this.current.type,
-      shape: spawnShape(this.current.type),
-      special: this.current.special,
-    };
-    if (this.hold === null) {
-      this.hold = heldFromCurrent;
-      this.spawn();
-    } else {
-      const swapped = this.hold;
-      this.hold = heldFromCurrent;
-      this.current = {
-        type: swapped.type,
-        shape: spawnShape(swapped.type),
-        x: spawnX(swapped.type),
-        y: 0,
-        special: swapped.special,
-      };
-      if (this.collide(this.current.shape, this.current.x, this.current.y))
-        this.endGame();
-    }
-    this.holdLocked = true;
-    this.drawHold();
   }
   private spawnFloatingText(text: string, color: string) {
     this.floatingTexts.push({
@@ -689,9 +641,6 @@ export class TetrisEngine {
   private drawNext() {
     this.drawPreview(this.nextCtx, this.nextCanvas, this.next);
   }
-  private drawHold() {
-    this.drawPreview(this.holdCtx, this.holdCanvas, this.hold);
-  }
   private draw() {
     const ctx = this.boardCtx;
     ctx.clearRect(0, 0, W, H);
@@ -797,13 +746,10 @@ export class TetrisEngine {
     this.lastTime = null;
     this.combo = 0;
     this.floatingTexts = [];
-    this.hold = null;
-    this.holdLocked = false;
     this.linesUntilPowerUp = this.randomPowerUpThreshold();
     this.nextIsSpecial = false;
     this.next = this.randomPiece(false);
     this.spawn();
-    this.drawHold();
   }
   private endGame() {
     this.state = "gameover";
@@ -824,7 +770,6 @@ export class TetrisEngine {
   setSkin(skin: SkinName): void {
     this.currentSkin = skin;
     this.draw();
-    this.drawHold();
     this.drawNext();
   }
   pause(): void {
