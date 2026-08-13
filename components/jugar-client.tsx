@@ -4,15 +4,15 @@ import { useRouter } from "next/navigation";
 import type { Game } from "@/lib/games";
 import { useAuth } from "@/components/auth-provider";
 import {
-  AsteroidesCanvas,
-  type AsteroidesCanvasHandle,
-} from "@/components/games/asteroides-canvas";
-import type { EngineStats } from "@/lib/games/asteroides/engine";
+  getRegisteredGame,
+  type EngineStats,
+  type GameEngineHandle,
+} from "@/lib/games/registry";
 export function JugarClient({ game }: { game: Game }) {
   const router = useRouter();
   const { user, saveScore } = useAuth();
-  const isAsteroides = game.id === "asteroides";
-  const engineRef = useRef<AsteroidesCanvasHandle>(null);
+  const registered = getRegisteredGame(game.id);
+  const engineRef = useRef<GameEngineHandle>(null);
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [engineLevel, setEngineLevel] = useState(1);
@@ -20,15 +20,15 @@ export function JugarClient({ game }: { game: Game }) {
   const [over, setOver] = useState(false);
   const [name, setName] = useState(user ? user.name : "INVITADO");
   const [saved, setSaved] = useState(false);
-  const level = isAsteroides ? engineLevel : Math.floor(score / 2500) + 1;
+  const level = registered ? engineLevel : Math.floor(score / 2500) + 1;
   useEffect(() => {
-    if (isAsteroides || over || paused) return;
+    if (registered || over || paused) return;
     const t = setInterval(
       () => setScore((s) => s + Math.floor(10 + Math.random() * 90)),
       220,
     );
     return () => clearInterval(t);
-  }, [isAsteroides, over, paused]);
+  }, [registered, over, paused]);
   const handleStats = (stats: EngineStats) => {
     setScore(stats.score);
     setLives(stats.lives);
@@ -40,14 +40,14 @@ export function JugarClient({ game }: { game: Game }) {
     engineRef.current?.pause();
   };
   const togglePause = () => {
-    if (isAsteroides) {
+    if (registered) {
       if (paused) engineRef.current?.resume();
       else engineRef.current?.pause();
     }
     setPaused((p) => !p);
   };
   const endGame = () => {
-    if (isAsteroides) engineRef.current?.forceGameOver();
+    if (registered) engineRef.current?.forceGameOver();
     else setOver(true);
   };
   const restart = () => {
@@ -55,7 +55,7 @@ export function JugarClient({ game }: { game: Game }) {
     setPaused(false);
     setOver(false);
     setSaved(false);
-    if (isAsteroides) engineRef.current?.reset();
+    if (registered) engineRef.current?.reset();
   };
   return (
     <div className="av-player fade-in">
@@ -97,8 +97,8 @@ export function JugarClient({ game }: { game: Game }) {
       </div>
       <div className="crt">
         <div className="crt-screen">
-          {isAsteroides ? (
-            <AsteroidesCanvas
+          {registered ? (
+            <registered.Canvas
               ref={engineRef}
               onStats={handleStats}
               onGameOver={handleGameOver}
