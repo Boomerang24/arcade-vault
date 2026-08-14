@@ -177,6 +177,21 @@ export function JugarClient({ game }: { game: Game }) {
               <button className="btn magenta" onClick={() => router.push("/")}>
                 VOLVER AL VAULT
               </button>
+              <button
+                className="btn ghost"
+                onClick={() => {
+                  if (
+                    !saved &&
+                    !window.confirm(
+                      "Tu puntuación aún no está guardada. ¿Salir de todas formas?",
+                    )
+                  )
+                    return;
+                  router.push("/salon-de-la-fama");
+                }}
+              >
+                VER LEADERBOARD
+              </button>
             </div>
           </div>
         </div>
