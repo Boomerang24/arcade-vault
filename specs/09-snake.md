@@ -1,6 +1,6 @@
 # 09 — Juego: Snake
 
-**Estado:** Approved
+**Estado:** Implemented
 **Depende de:** SPEC 05, SPEC 06, SPEC 07
 **Fecha:** 2026-08-13
 
