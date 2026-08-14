@@ -89,6 +89,7 @@ export class SnakeEngine {
   private spritesLoaded = false;
   private rafId: number | null = null;
   private paused = false;
+  private destroyed = false;
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("No se pudo obtener el contexto 2D del canvas");
@@ -100,6 +101,7 @@ export class SnakeEngine {
     this.ctx.fillRect(0, 0, W, H);
     this.spriteImage = new Image();
     this.spriteImage.onload = () => {
+      if (this.destroyed) return;
       this.spritesLoaded = true;
       this.lastTickTime = performance.now();
       this.rafId = requestAnimationFrame(this.loop);
@@ -317,6 +319,7 @@ export class SnakeEngine {
     });
   }
   destroy(): void {
+    this.destroyed = true;
     this.pause();
     window.removeEventListener("keydown", this.handleKeyDown);
   }

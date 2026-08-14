@@ -34,6 +34,20 @@ export const SnakeCanvas = forwardRef<SnakeCanvasHandle, Props>(
       reset: () => engineRef.current?.reset(),
       forceGameOver: () => engineRef.current?.forceGameOver(),
     }));
-    return <canvas ref={canvasRef} width={800} height={600} />;
+    return (
+      <canvas
+        ref={canvasRef}
+        width={800}
+        height={600}
+        style={{
+          position: "absolute",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          border: "1px solid var(--green)",
+          boxShadow: "inset 0 0 12px rgba(0, 255, 136, 0.25)",
+        }}
+      />
+    );
   },
 );
