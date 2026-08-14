@@ -20,10 +20,14 @@ Features go through specs in `specs/NN-slug.md` (`Draft` → `Approved` → `Imp
 
 Do not jump straight to code for a feature — write or find the spec first. Specs 01–10 are implemented.
 
+### `@game-planner` subagent
+
+Before deciding _which_ game to add next, use the `@game-planner` subagent (`.claude/agents/game-planner.md`). It weighs technical fit against the engine contract (`EngineStats`) and category diversity across the catalog, and keeps a persistent, git-tracked memory of suggestions in `references/game-suggestions-todo.md` (Pendientes/Descartadas/Implementadas) so proposals aren't re-derived or repeated across sessions. It **never writes code or specs** — its recommendation feeds into `/add-game`.
+
 ## Skills
 
 - Use siempre `/frontend-design` para diseñar la interfaz de usuario.
-- `/add-game` para cualquier juego nuevo (ver arriba).
+- `/add-game` para cualquier juego nuevo (ver arriba). Considera invocar `@game-planner` antes, para decidir qué juego conviene.
 
 ## Architecture
 
@@ -54,7 +58,7 @@ Every game follows the same contract; do not add per-game branches to shared com
 - `lib/games/registry.ts` — `GAME_REGISTRY` / `getRegisteredGame(id)` maps game id → canvas component. **Adding a game is one line here.** `components/jugar-client.tsx` reads only the registry.
 - Shared types (`EngineStats`, `GameEngineHandle`, `GameCanvasProps`) live in the registry. **Never extend `EngineStats`** — force the mapping and document it in the spec instead.
 - Current games: `asteroides`, `tetris`, `arkanoid`, `snake` and more...
-(see `references/implemented-games.md`) when you to check which games are implemented and how to implement new ones.
+  (see `references/implemented-games.md`) when you to check which games are implemented and how to implement new ones.
 - Game assets under `public/games/<id>/`.
 
 ### Reference material
