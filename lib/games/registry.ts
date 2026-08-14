@@ -7,6 +7,10 @@ import {
   TetrisCanvas,
   type TetrisCanvasHandle,
 } from "@/components/games/tetris-canvas";
+import {
+  ArkanoidCanvas,
+  type ArkanoidCanvasHandle,
+} from "@/components/games/arkanoid-canvas";
 export type EngineStats = {
   score: number;
   lives: number;
@@ -31,10 +35,15 @@ export type RegisteredGame = {
 export const GAME_REGISTRY: Record<string, RegisteredGame> = {
   asteroides: { Canvas: AsteroidesCanvas },
   tetris: { Canvas: TetrisCanvas },
+  arkanoid: { Canvas: ArkanoidCanvas },
 };
 export function getRegisteredGame(id: string): RegisteredGame | undefined {
   return GAME_REGISTRY[id];
 }
 // Reexports para que los tipos de handle de cada juego sigan disponibles
 // sin que jugar-client.tsx tenga que importarlos directo de cada juego.
-export type { AsteroidesCanvasHandle, TetrisCanvasHandle };
+export type {
+  AsteroidesCanvasHandle,
+  TetrisCanvasHandle,
+  ArkanoidCanvasHandle,
+};
