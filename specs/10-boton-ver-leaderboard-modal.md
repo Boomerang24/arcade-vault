@@ -1,6 +1,6 @@
 # 10 — Botón "Ver leaderboard" en el modal de fin de partida
 
-**Estado:** Approved
+**Estado:** Implemented
 **Depende de:** SPEC 06
 **Fecha:** 2026-08-13
 
