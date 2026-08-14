@@ -11,6 +11,10 @@ import {
   ArkanoidCanvas,
   type ArkanoidCanvasHandle,
 } from "@/components/games/arkanoid-canvas";
+import {
+  SnakeCanvas,
+  type SnakeCanvasHandle,
+} from "@/components/games/snake-canvas";
 export type EngineStats = {
   score: number;
   lives: number;
@@ -36,6 +40,7 @@ export const GAME_REGISTRY: Record<string, RegisteredGame> = {
   asteroides: { Canvas: AsteroidesCanvas },
   tetris: { Canvas: TetrisCanvas },
   arkanoid: { Canvas: ArkanoidCanvas },
+  snake: { Canvas: SnakeCanvas },
 };
 export function getRegisteredGame(id: string): RegisteredGame | undefined {
   return GAME_REGISTRY[id];
@@ -46,4 +51,5 @@ export type {
   AsteroidesCanvasHandle,
   TetrisCanvasHandle,
   ArkanoidCanvasHandle,
+  SnakeCanvasHandle,
 };
