@@ -87,6 +87,71 @@ const EXPLOSION_FRAMES: Record<string, SpriteFrame[]> = {
     { sx: 352, sy: 240, sw: 32, sh: 16 },
   ],
 };
+export type SkinName = "classic" | "neon" | "retro";
+// `null` = dibujar el sprite tal cual (sin teñir). `dim` oscurece el sprite ya
+// teñido, para poder diferenciar filas dentro de una paleta monocroma.
+type Tint = { color: string; dim?: number } | null;
+type Palette = {
+  background: string;
+  paddle: Tint;
+  ball: Tint;
+  // Clave = color de fila original del spritesheet (BRICK_ROW_COLORS).
+  bricks: Record<string, Tint>;
+  glow: number;
+  scanlines: boolean;
+  overlayDim: string;
+  overlayTitle: string;
+  overlaySub: string;
+};
+const SKIN_PALETTES: Record<SkinName, Palette> = {
+  // Pixel-idéntico al port original: sin teñido, sin glow, sin scanlines.
+  classic: {
+    background: "#000000",
+    paddle: null,
+    ball: null,
+    bricks: {},
+    glow: 0,
+    scanlines: false,
+    overlayDim: "rgba(0, 0, 0, 0.6)",
+    overlayTitle: "#f0f0f0",
+    overlaySub: "#f0f0f0",
+  },
+  neon: {
+    background: "#06000f",
+    paddle: { color: "#00f5ff" },
+    ball: { color: "#f5ff00" },
+    bricks: {
+      red: { color: "#ff006e" },
+      yellow: { color: "#f5ff00" },
+      green: { color: "#00ff88" },
+      cyan: { color: "#00f5ff" },
+      magenta: { color: "#c800ff" },
+    },
+    glow: 14,
+    scanlines: false,
+    overlayDim: "rgba(6, 0, 15, 0.72)",
+    overlayTitle: "#ff006e",
+    overlaySub: "#00f5ff",
+  },
+  // CRT de fósforo ámbar: un solo tono, filas diferenciadas por brillo.
+  retro: {
+    background: "#0a0600",
+    paddle: { color: "#ffb000" },
+    ball: { color: "#ffb000" },
+    bricks: {
+      red: { color: "#ffb000" },
+      yellow: { color: "#ffb000", dim: 0.08 },
+      green: { color: "#ffb000", dim: 0.16 },
+      cyan: { color: "#ffb000", dim: 0.24 },
+      magenta: { color: "#ffb000", dim: 0.32 },
+    },
+    glow: 0,
+    scanlines: true,
+    overlayDim: "rgba(10, 6, 0, 0.7)",
+    overlayTitle: "#ffb000",
+    overlaySub: "#ffb000",
+  },
+};
 type Brick = {
   x: number;
   y: number;
@@ -138,6 +203,8 @@ export class ArkanoidEngine {
   private gameOverNotified = false;
   private spriteImage: HTMLImageElement;
   private spritesLoaded = false;
+  private currentSkin: SkinName = "classic";
+  private tintCache = new Map<string, HTMLCanvasElement>();
   private bounceSound: HTMLAudioElement;
   private breakSound: HTMLAudioElement;
   private activeClones: HTMLAudioElement[] = [];
@@ -172,7 +239,7 @@ export class ArkanoidEngine {
     this.resetPaddle();
     this.resetBall();
     this.generateBricks();
-    this.ctx.fillStyle = "#000";
+    this.ctx.fillStyle = this.palette.background;
     this.ctx.fillRect(0, 0, W, H);
     this.spriteImage = new Image();
     this.spriteImage.onload = () => {
@@ -379,25 +446,87 @@ export class ArkanoidEngine {
       }
     }
   }
+  private get palette(): Palette {
+    return SKIN_PALETTES[this.currentSkin];
+  }
+  // Tiñe un frame del spritesheet en un canvas offscreen y lo cachea por
+  // (frame, color, dim). El modo "color" reemplaza tono+saturación pero
+  // conserva la luminosidad, así el bisel del sprite original no se pierde;
+  // "destination-in" recupera el alpha del sprite tras el rellenado.
+  private getTintedFrame(
+    frame: SpriteFrame,
+    tint: { color: string; dim?: number },
+  ): HTMLCanvasElement | null {
+    const dim = tint.dim ?? 0;
+    const key = `${frame.sx},${frame.sy},${frame.sw},${frame.sh}|${tint.color}|${dim}`;
+    const cached = this.tintCache.get(key);
+    if (cached) return cached;
+    const off = document.createElement("canvas");
+    off.width = frame.sw;
+    off.height = frame.sh;
+    const c = off.getContext("2d");
+    if (!c) return null;
+    const blit = () =>
+      c.drawImage(
+        this.spriteImage,
+        frame.sx,
+        frame.sy,
+        frame.sw,
+        frame.sh,
+        0,
+        0,
+        frame.sw,
+        frame.sh,
+      );
+    blit();
+    c.globalCompositeOperation = "color";
+    c.fillStyle = tint.color;
+    c.fillRect(0, 0, frame.sw, frame.sh);
+    c.globalCompositeOperation = "destination-in";
+    blit();
+    if (dim > 0) {
+      c.globalCompositeOperation = "source-atop";
+      c.fillStyle = `rgba(0, 0, 0, ${dim})`;
+      c.fillRect(0, 0, frame.sw, frame.sh);
+    }
+    this.tintCache.set(key, off);
+    return off;
+  }
   private drawSprite(
     sprite: SpriteFrame,
     x: number,
     y: number,
     w: number,
     h: number,
+    tint: Tint = null,
   ) {
     if (!this.spritesLoaded) return;
-    this.ctx.drawImage(
-      this.spriteImage,
-      sprite.sx,
-      sprite.sy,
-      sprite.sw,
-      sprite.sh,
-      x,
-      y,
-      w,
-      h,
-    );
+    const ctx = this.ctx;
+    const glow = this.palette.glow;
+    if (glow > 0 && tint) {
+      ctx.shadowBlur = glow;
+      ctx.shadowColor = tint.color;
+    }
+    const tinted = tint ? this.getTintedFrame(sprite, tint) : null;
+    if (tinted) {
+      ctx.drawImage(tinted, 0, 0, sprite.sw, sprite.sh, x, y, w, h);
+    } else {
+      ctx.drawImage(
+        this.spriteImage,
+        sprite.sx,
+        sprite.sy,
+        sprite.sw,
+        sprite.sh,
+        x,
+        y,
+        w,
+        h,
+      );
+    }
+    if (glow > 0 && tint) {
+      ctx.shadowBlur = 0;
+      ctx.shadowColor = "transparent";
+    }
   }
   private drawPaddle() {
     this.drawSprite(
@@ -406,6 +535,7 @@ export class ArkanoidEngine {
       this.paddle.y,
       this.paddle.width,
       this.paddle.height,
+      this.palette.paddle,
     );
   }
   private drawBall() {
@@ -416,6 +546,7 @@ export class ArkanoidEngine {
       ball.y - ball.radius,
       ball.radius * 2,
       ball.radius * 2,
+      this.palette.ball,
     );
   }
   private drawBricks() {
@@ -423,7 +554,21 @@ export class ArkanoidEngine {
       if (!brick.active) continue;
       const sprite = SPRITES.blocks[brick.color];
       if (sprite)
-        this.drawSprite(sprite, brick.x, brick.y, brick.width, brick.height);
+        this.drawSprite(
+          sprite,
+          brick.x,
+          brick.y,
+          brick.width,
+          brick.height,
+          this.palette.bricks[brick.color] ?? null,
+        );
+    }
+  }
+  private drawScanlines() {
+    const ctx = this.ctx;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+    for (let y = 0; y < H; y += 3) {
+      ctx.fillRect(0, y, W, 1);
     }
   }
   private drawExplosions() {
@@ -443,28 +588,39 @@ export class ArkanoidEngine {
           explosion.y,
           explosion.width,
           explosion.height,
+          this.palette.bricks[explosion.color] ?? null,
         );
     }
   }
   private drawOverlay(title: string, sub: string) {
     const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    const palette = this.palette;
+    ctx.fillStyle = palette.overlayDim;
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = "#f0f0f0";
     ctx.textAlign = "center";
+    if (palette.glow > 0) {
+      ctx.shadowBlur = palette.glow;
+      ctx.shadowColor = palette.overlayTitle;
+    }
+    ctx.fillStyle = palette.overlayTitle;
     ctx.font = 'bold 44px "Courier New", monospace';
     ctx.fillText(title, W / 2, H / 2 - 20);
+    if (palette.glow > 0) ctx.shadowColor = palette.overlaySub;
+    ctx.fillStyle = palette.overlaySub;
     ctx.font = '20px "Courier New", monospace';
     ctx.fillText(sub, W / 2, H / 2 + 30);
+    ctx.shadowBlur = 0;
+    ctx.shadowColor = "transparent";
   }
   private draw() {
     const ctx = this.ctx;
-    ctx.fillStyle = "#000";
+    ctx.fillStyle = this.palette.background;
     ctx.fillRect(0, 0, W, H);
     this.drawBricks();
     this.drawExplosions();
     this.drawPaddle();
     this.drawBall();
+    if (this.palette.scanlines) this.drawScanlines();
     if (this.phase === "levelup") {
       this.drawOverlay(`Nivel ${this.currentLevel + 1}`, "");
     } else if (this.phase === "gameover") {
@@ -515,6 +671,11 @@ export class ArkanoidEngine {
       this.paused = false;
       this.rafId = requestAnimationFrame(this.loop);
     }
+  }
+  // Redibuja sincrónicamente para que el cambio se vea también en pausa.
+  setSkin(skin: SkinName): void {
+    this.currentSkin = skin;
+    this.draw();
   }
   forceGameOver(): void {
     if (this.phase === "gameover") return;

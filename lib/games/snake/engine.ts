@@ -22,6 +22,73 @@ const FRUITS_PER_LEVEL = 5;
 const BASE_TICK_MS = 140;
 const MIN_TICK_MS = 60;
 const TICK_STEP_MS = 8; // reducción del intervalo por nivel
+// ---- skins ----
+export type SkinName = "classic" | "neon" | "retro";
+type Palette = {
+  background: string;
+  head: string;
+  body: string;
+  bodyEdge: string | null; // contorno del segmento (null = sin contorno)
+  fruitTint: string | null; // teñido del sprite (null = sprite original)
+  fruitTintAlpha: number;
+  overlayBackdrop: string;
+  overlayTitle: string;
+  overlaySub: string;
+  cornerRadius: number;
+};
+const SKIN_PALETTES: Record<SkinName, Palette> = {
+  // `classic` reproduce exactamente los literales originales del motor.
+  classic: {
+    background: "#000000",
+    head: "#4ade80",
+    body: "#16a34a",
+    bodyEdge: null,
+    fruitTint: null,
+    fruitTintAlpha: 0,
+    overlayBackdrop: "rgba(0, 0, 0, 0.6)",
+    overlayTitle: "#f0f0f0",
+    overlaySub: "#f0f0f0",
+    cornerRadius: 4,
+  },
+  neon: {
+    background: "#06000f",
+    head: "#00f5ff",
+    body: "#00ff88",
+    bodyEdge: "#00f5ff",
+    fruitTint: "#f5ff00",
+    fruitTintAlpha: 0.35,
+    overlayBackdrop: "rgba(6, 0, 15, 0.68)",
+    overlayTitle: "#ff006e",
+    overlaySub: "#00f5ff",
+    cornerRadius: 4,
+  },
+  retro: {
+    background: "#0a0600",
+    head: "#ffb000",
+    body: "#cc7a00",
+    bodyEdge: "#0a0600",
+    fruitTint: "#ffb000",
+    fruitTintAlpha: 1,
+    overlayBackdrop: "rgba(10, 6, 0, 0.68)",
+    overlayTitle: "#ffb000",
+    overlaySub: "#ffb000",
+    cornerRadius: 0,
+  },
+};
+// Glow por skin: se aplica dentro de cada primitiva de dibujo.
+function applySkinGlow(
+  ctx: CanvasRenderingContext2D,
+  skin: SkinName,
+  color: string,
+  blur = 12,
+) {
+  if (skin === "neon") {
+    ctx.shadowColor = color;
+    ctx.shadowBlur = blur;
+  } else {
+    ctx.shadowBlur = 0;
+  }
+}
 type SpriteFrame = { x: number; y: number; w: number; h: number };
 // Hoja: 3790x442 px, fondo transparente. Fila usada: y=136-295.
 const FRUIT_SPRITES: Record<string, SpriteFrame> = {
@@ -90,6 +157,12 @@ export class SnakeEngine {
   private rafId: number | null = null;
   private paused = false;
   private destroyed = false;
+  private currentSkin: SkinName = "classic";
+  // Cache de sprites teñidos, clave `${kind}|${skin}`. Evita re-teñir por frame.
+  private tintedFruits = new Map<string, HTMLCanvasElement>();
+  private get palette(): Palette {
+    return SKIN_PALETTES[this.currentSkin];
+  }
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("No se pudo obtener el contexto 2D del canvas");
@@ -97,7 +170,7 @@ export class SnakeEngine {
     this.callbacks = callbacks;
     window.addEventListener("keydown", this.handleKeyDown);
     this.initState();
-    this.ctx.fillStyle = "#000";
+    this.ctx.fillStyle = this.palette.background;
     this.ctx.fillRect(0, 0, W, H);
     this.spriteImage = new Image();
     this.spriteImage.onload = () => {
@@ -220,51 +293,123 @@ export class SnakeEngine {
   }
   private drawSnake() {
     const ctx = this.ctx;
+    const p = this.palette;
+    const skin = this.currentSkin;
     this.snake.forEach((seg, i) => {
-      ctx.fillStyle = i === 0 ? "#4ade80" : "#16a34a";
+      const color = i === 0 ? p.head : p.body;
       const pad = 1;
-      const r = 4;
       const x = seg.x * CELL + pad;
       const y = seg.y * CELL + pad;
       const size = CELL - pad * 2;
+      applySkinGlow(ctx, skin, color, i === 0 ? 14 : 8);
+      ctx.fillStyle = color;
       ctx.beginPath();
-      ctx.roundRect(x, y, size, size, r);
+      ctx.roundRect(x, y, size, size, p.cornerRadius);
       ctx.fill();
+      if (p.bodyEdge) {
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = p.bodyEdge;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      ctx.shadowBlur = 0;
     });
   }
-  private drawFruit() {
-    if (!this.fruit || !this.spritesLoaded) return;
-    const sprite = FRUIT_SPRITES[this.fruit.kind];
-    if (!sprite) return;
-    this.ctx.drawImage(
+  // Devuelve el frame del sprite teñido con el color de la skin actual,
+  // usando un canvas offscreen + `source-atop` (respeta la transparencia).
+  private tintedFruit(kind: string): CanvasImageSource | null {
+    const p = this.palette;
+    const sprite = FRUIT_SPRITES[kind];
+    if (!sprite) return null;
+    if (!p.fruitTint) return null;
+    const key = `${kind}|${this.currentSkin}`;
+    const cached = this.tintedFruits.get(key);
+    if (cached) return cached;
+    const off = document.createElement("canvas");
+    off.width = sprite.w;
+    off.height = sprite.h;
+    const octx = off.getContext("2d");
+    if (!octx) return null;
+    octx.drawImage(
       this.spriteImage,
       sprite.x,
       sprite.y,
       sprite.w,
       sprite.h,
-      this.fruit.pos.x * CELL,
-      this.fruit.pos.y * CELL,
-      CELL,
-      CELL,
+      0,
+      0,
+      sprite.w,
+      sprite.h,
     );
+    octx.globalCompositeOperation = "source-atop";
+    octx.globalAlpha = p.fruitTintAlpha;
+    octx.fillStyle = p.fruitTint;
+    octx.fillRect(0, 0, sprite.w, sprite.h);
+    this.tintedFruits.set(key, off);
+    return off;
+  }
+  private drawFruit() {
+    if (!this.fruit || !this.spritesLoaded) return;
+    const sprite = FRUIT_SPRITES[this.fruit.kind];
+    if (!sprite) return;
+    const ctx = this.ctx;
+    const dx = this.fruit.pos.x * CELL;
+    const dy = this.fruit.pos.y * CELL;
+    applySkinGlow(
+      ctx,
+      this.currentSkin,
+      this.palette.fruitTint ?? "#ffffff",
+      12,
+    );
+    const tinted = this.tintedFruit(this.fruit.kind);
+    if (tinted) {
+      ctx.drawImage(tinted, 0, 0, sprite.w, sprite.h, dx, dy, CELL, CELL);
+    } else {
+      ctx.drawImage(
+        this.spriteImage,
+        sprite.x,
+        sprite.y,
+        sprite.w,
+        sprite.h,
+        dx,
+        dy,
+        CELL,
+        CELL,
+      );
+    }
+    ctx.shadowBlur = 0;
+  }
+  // Textura CRT de la skin `retro`: scanlines horizontales sutiles.
+  private drawScanlines() {
+    const ctx = this.ctx;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+    for (let y = 0; y < H; y += 3) {
+      ctx.fillRect(0, y, W, 1);
+    }
   }
   private drawOverlay(title: string, sub: string) {
     const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    const p = this.palette;
+    ctx.fillStyle = p.overlayBackdrop;
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = "#f0f0f0";
     ctx.textAlign = "center";
+    applySkinGlow(ctx, this.currentSkin, p.overlayTitle, 18);
+    ctx.fillStyle = p.overlayTitle;
     ctx.font = 'bold 44px "Courier New", monospace';
     ctx.fillText(title, W / 2, H / 2 - 20);
+    applySkinGlow(ctx, this.currentSkin, p.overlaySub, 10);
+    ctx.fillStyle = p.overlaySub;
     ctx.font = '20px "Courier New", monospace';
     ctx.fillText(sub, W / 2, H / 2 + 30);
+    ctx.shadowBlur = 0;
   }
   private draw() {
     const ctx = this.ctx;
-    ctx.fillStyle = "#000";
+    ctx.fillStyle = this.palette.background;
     ctx.fillRect(0, 0, W, H);
     this.drawFruit();
     this.drawSnake();
+    if (this.currentSkin === "retro") this.drawScanlines();
     if (this.phase === "gameover") {
       this.drawOverlay("GAME OVER", `Score final: ${this.score}`);
     }
@@ -317,6 +462,11 @@ export class SnakeEngine {
       level: this.level,
       state: "gameover",
     });
+  }
+  // Redibuja sincrónicamente para que el cambio se vea también en pausa.
+  setSkin(skin: SkinName): void {
+    this.currentSkin = skin;
+    this.draw();
   }
   destroy(): void {
     this.destroyed = true;
