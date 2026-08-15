@@ -1097,11 +1097,11 @@ a {
 .touch-controls {
   display: none;
   align-items: center;
-  justify-content: space-between;
-  gap: 28px;
+  justify-content: center;
+  gap: 56px;
   margin-top: 20px;
   width: 100%;
-  max-width: 320px;
+  padding: 0 12px;
 }
 .touch-dpad {
   display: grid;
