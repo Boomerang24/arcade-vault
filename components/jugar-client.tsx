@@ -9,6 +9,17 @@ import {
   type GameEngineHandle,
 } from "@/lib/games/registry";
 import { MobileFooter } from "@/components/games/mobile-footer";
+import { TouchControls } from "@/components/games/touch-controls";
+// D-pad relevante por juego, según el mapeo de controles de la spec 12.
+const TOUCH_DIRECTIONS: Record<
+  string,
+  { up?: boolean; down?: boolean; left?: boolean; right?: boolean }
+> = {
+  asteroides: { up: true, down: false, left: true, right: true },
+  tetris: { up: true, down: true, left: true, right: true },
+  arkanoid: { up: false, down: false, left: true, right: true },
+  snake: { up: true, down: true, left: true, right: true },
+};
 export function JugarClient({ game }: { game: Game }) {
   const router = useRouter();
   const { user, saveScore } = useAuth();
@@ -188,6 +199,12 @@ export function JugarClient({ game }: { game: Game }) {
         onSkinChange={handleSkinChange}
         onExit={() => router.push(`/juego/${game.id}`)}
       />
+      {registered && (
+        <TouchControls
+          actions={registered.touchActions ?? []}
+          directions={TOUCH_DIRECTIONS[game.id]}
+        />
+      )}
       {over && (
         <div className="modal-bd">
           <div className="modal">

@@ -76,7 +76,7 @@ export function TouchControls({ actions, directions }: TouchControlsProps) {
           disabled={!dirs.up}
           {...pressHandlers("ArrowUp")}
         >
-          ▲
+          <span className="touch-dpad-arrow">▲</span>
         </button>
         <button
           type="button"
@@ -84,7 +84,7 @@ export function TouchControls({ actions, directions }: TouchControlsProps) {
           disabled={!dirs.left}
           {...pressHandlers("ArrowLeft")}
         >
-          ◀
+          <span className="touch-dpad-arrow touch-dpad-arrow-left">▲</span>
         </button>
         <button
           type="button"
@@ -92,7 +92,7 @@ export function TouchControls({ actions, directions }: TouchControlsProps) {
           disabled={!dirs.right}
           {...pressHandlers("ArrowRight")}
         >
-          ▶
+          <span className="touch-dpad-arrow touch-dpad-arrow-right">▲</span>
         </button>
         <button
           type="button"
@@ -100,7 +100,7 @@ export function TouchControls({ actions, directions }: TouchControlsProps) {
           disabled={!dirs.down}
           {...pressHandlers("ArrowDown")}
         >
-          ▼
+          <span className="touch-dpad-arrow touch-dpad-arrow-down">▲</span>
         </button>
       </div>
       {actions.length > 0 && (
@@ -109,7 +109,7 @@ export function TouchControls({ actions, directions }: TouchControlsProps) {
             <button
               key={action.code}
               type="button"
-              className="btn yellow touch-action-btn"
+              className="btn touch-action-btn"
               {...pressHandlers(action.code)}
             >
               {action.label}

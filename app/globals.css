@@ -1082,14 +1082,125 @@ a {
   display: none;
   align-items: center;
   justify-content: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-top: 14px;
+  padding: 0 12px;
+}
+.mobile-footer select {
+  max-width: 120px;
+}
+.touch-controls {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 28px;
+  margin-top: 20px;
+  width: 100%;
+  max-width: 320px;
+}
+.touch-dpad {
+  display: grid;
+  grid-template-columns: repeat(3, 48px);
+  grid-template-rows: repeat(3, 48px);
+  gap: 4px;
+}
+.touch-dpad button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 16px;
+  clip-path: none;
+  border-radius: 10px;
+  background: var(--bg-3);
+}
+.touch-dpad button::before,
+.touch-action-btn::before {
+  display: none;
+}
+.touch-dpad-arrow {
+  display: inline-block;
+  line-height: 1;
+}
+.touch-dpad-arrow-left {
+  transform: rotate(-90deg);
+}
+.touch-dpad-arrow-right {
+  transform: rotate(90deg);
+}
+.touch-dpad-arrow-down {
+  transform: rotate(180deg);
+}
+.touch-dpad-up {
+  grid-column: 2;
+  grid-row: 1;
+}
+.touch-dpad-left {
+  grid-column: 1;
+  grid-row: 2;
+}
+.touch-dpad-right {
+  grid-column: 3;
+  grid-row: 2;
+}
+.touch-dpad-down {
+  grid-column: 2;
+  grid-row: 3;
+}
+.touch-dpad button:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.touch-actions {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.touch-action-btn {
+  min-width: 0;
+  width: 68px;
+  height: 68px;
+  padding: 0 8px;
+  border-radius: 50%;
+  font-family: var(--mono);
+  font-size: 8px;
+  letter-spacing: 0.04em;
+  line-height: 1.2;
+  white-space: normal;
+  word-break: break-word;
+  text-align: center;
+}
+.touch-action-btn:nth-child(1) {
+  border-color: var(--cyan);
+  margin-bottom: 22px;
+}
+.touch-action-btn:nth-child(1):hover {
+  color: var(--cyan);
+}
+.touch-action-btn:nth-child(2) {
+  border-color: var(--magenta);
+  margin-top: 22px;
+}
+.touch-action-btn:nth-child(2):hover {
+  color: var(--magenta);
+}
+.touch-action-btn:only-child {
+  width: 92px;
+  height: 92px;
+  padding: 0 14px;
+  font-size: 11px;
+  margin: 0;
 }
 @media (pointer: coarse) {
   .player-hud {
     display: none;
   }
   .mobile-footer {
+    display: flex;
+  }
+  .touch-controls {
     display: flex;
   }
   .av-player {
