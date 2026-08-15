@@ -1,11 +1,16 @@
 "use client";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { ArkanoidEngine, type EngineStats } from "@/lib/games/arkanoid/engine";
+import {
+  ArkanoidEngine,
+  type EngineStats,
+  type SkinName,
+} from "@/lib/games/arkanoid/engine";
 export type ArkanoidCanvasHandle = {
   pause: () => void;
   resume: () => void;
   reset: () => void;
   forceGameOver: () => void;
+  setSkin?: (skin: string) => void;
 };
 type Props = {
   onStats: (stats: EngineStats) => void;
@@ -33,6 +38,7 @@ export const ArkanoidCanvas = forwardRef<ArkanoidCanvasHandle, Props>(
       resume: () => engineRef.current?.resume(),
       reset: () => engineRef.current?.reset(),
       forceGameOver: () => engineRef.current?.forceGameOver(),
+      setSkin: (skin) => engineRef.current?.setSkin(skin as SkinName),
     }));
     return (
       <canvas

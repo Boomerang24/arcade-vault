@@ -3,12 +3,14 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import {
   AsteroidesEngine,
   type EngineStats,
+  type SkinName,
 } from "@/lib/games/asteroides/engine";
 export type AsteroidesCanvasHandle = {
   pause: () => void;
   resume: () => void;
   reset: () => void;
   forceGameOver: () => void;
+  setSkin?: (skin: string) => void;
 };
 type AsteroidesCanvasProps = {
   onStats: (stats: EngineStats) => void;
@@ -41,6 +43,7 @@ export const AsteroidesCanvas = forwardRef<
     resume: () => engineRef.current?.resume(),
     reset: () => engineRef.current?.reset(),
     forceGameOver: () => engineRef.current?.forceGameOver(),
+    setSkin: (skin) => engineRef.current?.setSkin(skin as SkinName),
   }));
   return (
     <canvas

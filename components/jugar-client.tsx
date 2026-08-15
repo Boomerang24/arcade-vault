@@ -20,6 +20,8 @@ export function JugarClient({ game }: { game: Game }) {
   const [over, setOver] = useState(false);
   const [name, setName] = useState(user ? user.name : "INVITADO");
   const [saved, setSaved] = useState(false);
+  const skinStorageKey = `av_skin_${game.id}`;
+  const [skin, setSkin] = useState(registered?.skins?.[0]?.id ?? "");
   const level = registered ? engineLevel : Math.floor(score / 2500) + 1;
   useEffect(() => {
     if (registered || over || paused) return;
@@ -29,6 +31,23 @@ export function JugarClient({ game }: { game: Game }) {
     );
     return () => clearInterval(t);
   }, [registered, over, paused]);
+  useEffect(() => {
+    // Lee localStorage post-hidratación únicamente, para mantener el markup
+    // server/client idéntico (mismo patrón que auth-provider.tsx).
+    if (!registered?.skins?.length) return;
+    const stored = localStorage.getItem(skinStorageKey);
+    const valid = registered.skins.some((s) => s.id === stored);
+    if (valid && stored) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSkin(stored);
+      engineRef.current?.setSkin?.(stored);
+    }
+  }, [registered, skinStorageKey]);
+  const handleSkinChange = (id: string) => {
+    setSkin(id);
+    engineRef.current?.setSkin?.(id);
+    localStorage.setItem(skinStorageKey, id);
+  };
   const handleStats = (stats: EngineStats) => {
     setScore(stats.score);
     setLives(stats.lives);
@@ -81,6 +100,20 @@ export function JugarClient({ game }: { game: Game }) {
           </div>
         </div>
         <div className="hud-actions">
+          {registered?.skins?.length ? (
+            <select
+              aria-label="Skin"
+              value={skin}
+              onChange={(e) => handleSkinChange(e.target.value)}
+              className="btn"
+            >
+              {registered.skins.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          ) : null}
           <button className="btn yellow" onClick={togglePause}>
             {paused ? "REANUDAR" : "PAUSA"}
           </button>

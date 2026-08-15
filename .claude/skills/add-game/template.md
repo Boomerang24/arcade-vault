@@ -120,6 +120,7 @@ export type GameEngineHandle = {
   resume: () => void;
   reset: () => void;
   forceGameOver: () => void;
+  setSkin?: (skin: string) => void; // opcional: solo si el juego tiene skins (ver @skin-designer)
 };
 
 export type GameCanvasProps = {
@@ -127,10 +128,13 @@ export type GameCanvasProps = {
   onGameOver: (finalScore: number) => void;
 };
 
+export type SkinOption = { id: string; label: string };
+
 export type RegisteredGame = {
   Canvas: React.ForwardRefExoticComponent<
     GameCanvasProps & React.RefAttributes<GameEngineHandle>
   >;
+  skins?: SkinOption[]; // opcional: el primero es el default ("classic")
 };
 
 export const GAME_REGISTRY: Record<string, RegisteredGame> = {
@@ -166,3 +170,5 @@ Cambios mecánicos en `components/jugar-client.tsx` (cada sitio que hoy compara 
 - Los imports directos de `AsteroidesCanvas`/`AsteroidesCanvasHandle`/`EngineStats` se mueven a vivir solo dentro de `lib/games/registry.ts`; `jugar-client.tsx` importa `getRegisteredGame`/`GameEngineHandle`/`EngineStats` desde ahí.
 
 No agregues campos nuevos a `EngineStats`, `GameCanvasProps` o `GameEngineHandle` para acomodar un juego específico. Si un juego no encaja, documenta el mapeo forzado como decisión explícita en su spec — el contrato se queda igual para que agregar el juego N+1 siga siendo una sola línea en `GAME_REGISTRY`.
+
+Un juego nuevo nace **sin** `skins` ni `setSkin` — ambos son opcionales y no se implementan como parte de `/add-game`. Dotar a un juego (nuevo o existente) de al menos 3 skins (`classic`/`neon`/`retro`) es tarea del subagente `@skin-designer`, que se invoca por separado, uno a la vez, después de que el juego ya esté jugable.

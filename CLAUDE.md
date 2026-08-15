@@ -20,10 +20,24 @@ Features go through specs in `specs/NN-slug.md` (`Draft` → `Approved` → `Imp
 
 Do not jump straight to code for a feature — write or find the spec first. Specs 01–10 are implemented.
 
+### `@game-planner` subagent
+
+Before deciding _which_ game to add next, use the `@game-planner` subagent (`.claude/agents/game-planner.md`). It weighs technical fit against the engine contract (`EngineStats`) and category diversity across the catalog, and keeps a persistent, git-tracked memory of suggestions in `references/game-suggestions-todo.md` (Pendientes/Descartadas/Implementadas) so proposals aren't re-derived or repeated across sessions. It **never writes code or specs** — its recommendation feeds into `/add-game`.
+
+### `@game-jam` subagent
+
+Given a theme (a phrase, an aesthetic, a mood), the `@game-jam` subagent (`.claude/agents/game-jam.md`) invents one original game from scratch — no porting from `references/started-games/` — and writes it as **2+ complete specs** in `specs/game-jam/<game-id>/` (a base spec with the minimum playable engine + registry + Supabase row, and a mechanics spec layering power-ups/levels/audio on top), matching the format and depth of specs 07/08/09. It is fully autonomous: it never asks questions, deciding every choice (id/title/cat/color/cover/mechanics/`EngineStats` mapping) itself and recording the reasoning in each spec's "Decisiones tomadas y descartadas". It **never writes code**, never touches `apply_migration`, and never marks a spec `Approved`. Its specs live outside `specs/` until the user reviews them, renumbers if needed, moves them into `specs/`, and runs `/spec-impl` on each in dependency order.
+
+### `@skin-designer` subagent
+
+Given the name or id of **one** game, the `@skin-designer` subagent (`.claude/agents/skin-designer.md`) guarantees that game has at least 3 visual skins — `classic` (default, the original look), `neon`, `retro` — by refactoring its engine's color literals into a `SKIN_PALETTES` table (the pattern Tetris already established) and wiring the shared skin selector in `jugar-client.tsx`/`lib/games/registry.ts`. It is the **only one of these three subagents that writes code**: adding skins is a bounded paint-layer refactor of an existing engine, not a new product feature, so it deliberately skips `/spec`/`/spec-impl`. It acts on **one game per run** — it never sweeps the whole catalog — and never extends `EngineStats`, changes mechanics, or adds new sprite assets (spritesheets are tinted at runtime instead). It keeps a persistent, git-tracked memory of which games already have skins and their exact palettes in `references/game-with-themes.md`, so the direction isn't re-derived per session.
+
 ## Skills
 
 - Use siempre `/frontend-design` para diseñar la interfaz de usuario.
-- `/add-game` para cualquier juego nuevo (ver arriba).
+- `/add-game` para cualquier juego nuevo (ver arriba). Considera invocar `@game-planner` antes, para decidir qué juego conviene.
+- `@game-jam` para prototipar rápido un juego nuevo a partir de un tema, sin preguntas — genera specs de borrador en `specs/game-jam/` para revisar. Úsalo en vez de `/add-game` cuando solo hay un tema y no una descripción concreta ya decidida.
+- `@skin-designer <juego>` para dotar a un juego existente de al menos 3 skins (classic/neon/retro). Escribe código directamente, un juego por corrida — no genera spec.
 
 ## Architecture
 
@@ -54,7 +68,7 @@ Every game follows the same contract; do not add per-game branches to shared com
 - `lib/games/registry.ts` — `GAME_REGISTRY` / `getRegisteredGame(id)` maps game id → canvas component. **Adding a game is one line here.** `components/jugar-client.tsx` reads only the registry.
 - Shared types (`EngineStats`, `GameEngineHandle`, `GameCanvasProps`) live in the registry. **Never extend `EngineStats`** — force the mapping and document it in the spec instead.
 - Current games: `asteroides`, `tetris`, `arkanoid`, `snake` and more...
-(see `references/implemented-games.md`) when you to check which games are implemented and how to implement new ones.
+  (see `references/implemented-games.md`) when you to check which games are implemented and how to implement new ones.
 - Game assets under `public/games/<id>/`.
 
 ### Reference material

@@ -1,11 +1,16 @@
 "use client";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { SnakeEngine, type EngineStats } from "@/lib/games/snake/engine";
+import {
+  SnakeEngine,
+  type EngineStats,
+  type SkinName,
+} from "@/lib/games/snake/engine";
 export type SnakeCanvasHandle = {
   pause: () => void;
   resume: () => void;
   reset: () => void;
   forceGameOver: () => void;
+  setSkin?: (skin: string) => void;
 };
 type Props = {
   onStats: (stats: EngineStats) => void;
@@ -33,6 +38,7 @@ export const SnakeCanvas = forwardRef<SnakeCanvasHandle, Props>(
       resume: () => engineRef.current?.resume(),
       reset: () => engineRef.current?.reset(),
       forceGameOver: () => engineRef.current?.forceGameOver(),
+      setSkin: (skin: string) => engineRef.current?.setSkin(skin as SkinName),
     }));
     return (
       <canvas

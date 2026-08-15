@@ -15,13 +15,13 @@ export type TetrisCanvases = {
   board: HTMLCanvasElement;
   next: HTMLCanvasElement;
 };
-export type SkinName = "retro" | "neon" | "pastel" | "pixelart";
+export type SkinName = "classic" | "neon" | "retro" | "pastel" | "pixelart";
 const COLS = 10;
 const ROWS = 20;
 const BLOCK = 30;
 const W = COLS * BLOCK;
 const H = ROWS * BLOCK;
-const COLORS: Array<string | null> = [
+const CLASSIC_COLORS: Array<string | null> = [
   null,
   "#4dd0e1", // I - cyan
   "#ffd54f", // O - yellow
@@ -31,6 +31,18 @@ const COLORS: Array<string | null> = [
   "#64b5f6", // J - pale blue
   "#ffb74d", // L - orange
   "#b0bec5", // N - nut (steel gray)
+];
+// CRT fósforo ámbar: monocromo, sin saturación por pieza.
+const RETRO_COLORS: Array<string | null> = [
+  null,
+  "#ffb000",
+  "#ffb000",
+  "#ffb000",
+  "#ffb000",
+  "#ffb000",
+  "#ffb000",
+  "#ffb000",
+  "#ffb000",
 ];
 const PIECES: Array<number[][] | null> = [
   null,
@@ -76,7 +88,8 @@ const PIECES: Array<number[][] | null> = [
   // ], // N - tuerca (deshabilitada por ahora, ver randomPiece)
 ];
 const SKIN_PALETTES: Record<SkinName, Array<string | null>> = {
-  retro: COLORS,
+  classic: CLASSIC_COLORS,
+  retro: RETRO_COLORS,
   neon: [
     null,
     "#00fff2",
@@ -99,7 +112,7 @@ const SKIN_PALETTES: Record<SkinName, Array<string | null>> = {
     "#ffd9b3",
     "#dbe0e6",
   ],
-  pixelart: COLORS,
+  pixelart: CLASSIC_COLORS,
 };
 const LINE_SCORES = [0, 100, 300, 500, 800];
 const PERFECT_CLEAR_BONUS = [0, 800, 1200, 1800, 2000];
@@ -140,7 +153,7 @@ export class TetrisEngine {
   private linesUntilPowerUp = 0;
   private nextIsSpecial = false;
   private floatingTexts: FloatingText[] = [];
-  private currentSkin: SkinName = "retro";
+  private currentSkin: SkinName = "classic";
   private paused = false;
   private lastTime: number | null = null;
   private dropAccum = 0;
@@ -420,7 +433,7 @@ export class TetrisEngine {
         this.collapseColumns(colsAffected);
       }
     } else if (piece.special === "tint") {
-      const counts = new Array(COLORS.length).fill(0);
+      const counts = new Array(CLASSIC_COLORS.length).fill(0);
       for (let r = 0; r < ROWS; r++)
         for (let c = 0; c < COLS; c++)
           if (this.board[r][c]) counts[this.board[r][c]]++;
@@ -566,7 +579,19 @@ export class TetrisEngine {
       ctx.fillStyle = color;
       ctx.fillRect(px + 1, py + 1, size - 2, size - 2);
       this.drawPixelTexture(ctx, px + 1, py + 1, size - 2);
+    } else if (this.currentSkin === "retro") {
+      // CRT fósforo: monocromo, sin glow, con líneas de scanline sutiles.
+      ctx.fillStyle = color;
+      ctx.fillRect(px + 1, py + 1, size - 2, size - 2);
+      ctx.strokeStyle = "rgba(0,0,0,0.6)";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(px + 1.5, py + 1.5, size - 3, size - 3);
+      ctx.fillStyle = "rgba(0,0,0,0.22)";
+      for (let sy = py + 1; sy < py + size - 1; sy += 3) {
+        ctx.fillRect(px + 1, sy, size - 2, 1);
+      }
     } else {
+      // classic
       ctx.fillStyle = color;
       ctx.fillRect(px + 1, py + 1, size - 2, size - 2);
       ctx.fillStyle = "rgba(255,255,255,0.12)";
