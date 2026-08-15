@@ -1088,7 +1088,7 @@ a {
   justify-content: center;
   flex-wrap: wrap;
   gap: 10px;
-  margin-top: 14px;
+  margin: 20px 0;
   padding: 0 12px;
 }
 .mobile-footer select {
@@ -1107,7 +1107,7 @@ a {
   display: grid;
   grid-template-columns: repeat(3, 48px);
   grid-template-rows: repeat(3, 48px);
-  gap: 4px;
+  gap: 10px;
 }
 .touch-dpad button {
   display: flex;
@@ -1191,10 +1191,10 @@ a {
   color: var(--magenta);
 }
 .touch-action-btn:only-child {
-  width: 92px;
-  height: 92px;
-  padding: 0 14px;
-  font-size: 11px;
+  width: 128px;
+  height: 128px;
+  padding: 0 18px;
+  font-size: 14px;
   margin: 0;
 }
 @media (pointer: coarse) {
