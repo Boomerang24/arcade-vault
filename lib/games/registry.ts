@@ -44,7 +44,14 @@ export type RegisteredGame = {
   skins?: SkinOption[];
 };
 export const GAME_REGISTRY: Record<string, RegisteredGame> = {
-  asteroides: { Canvas: AsteroidesCanvas },
+  asteroides: {
+    Canvas: AsteroidesCanvas,
+    skins: [
+      { id: "classic", label: "Classic" },
+      { id: "neon", label: "Neon" },
+      { id: "retro", label: "Retro" },
+    ],
+  },
   tetris: {
     Canvas: TetrisCanvas,
     skins: [
