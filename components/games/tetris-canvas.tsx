@@ -52,20 +52,20 @@ export const TetrisCanvas = forwardRef<TetrisCanvasHandle, TetrisCanvasProps>(
     }));
     return (
       <div
+        className="tetris-layout"
         style={{
           position: "absolute",
           inset: 0,
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          gap: 20,
-          padding: 16,
         }}
       >
         <canvas
           ref={boardRef}
           width={300}
           height={600}
+          className="tetris-board-canvas"
           style={{ height: "100%", width: "auto", maxHeight: "100%" }}
         />
         <div
@@ -91,6 +91,7 @@ export const TetrisCanvas = forwardRef<TetrisCanvasHandle, TetrisCanvasProps>(
               ref={nextRef}
               width={120}
               height={120}
+              className="tetris-next-canvas"
               style={{
                 background: "rgba(0,0,0,0.6)",
                 border: "1px solid var(--ink-dim)",
