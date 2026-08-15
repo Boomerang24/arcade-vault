@@ -35,6 +35,7 @@ type Palette = {
   overlayTitle: string;
   overlaySub: string;
   cornerRadius: number;
+  hud: string;
 };
 const SKIN_PALETTES: Record<SkinName, Palette> = {
   // `classic` reproduce exactamente los literales originales del motor.
@@ -49,6 +50,7 @@ const SKIN_PALETTES: Record<SkinName, Palette> = {
     overlayTitle: "#f0f0f0",
     overlaySub: "#f0f0f0",
     cornerRadius: 4,
+    hud: "#f0f0f0",
   },
   neon: {
     background: "#06000f",
@@ -61,6 +63,7 @@ const SKIN_PALETTES: Record<SkinName, Palette> = {
     overlayTitle: "#ff006e",
     overlaySub: "#00f5ff",
     cornerRadius: 4,
+    hud: "#00f5ff",
   },
   retro: {
     background: "#0a0600",
@@ -73,6 +76,7 @@ const SKIN_PALETTES: Record<SkinName, Palette> = {
     overlayTitle: "#ffb000",
     overlaySub: "#ffb000",
     cornerRadius: 0,
+    hud: "#ffb000",
   },
 };
 // Glow por skin: se aplica dentro de cada primitiva de dibujo.
@@ -387,6 +391,22 @@ export class SnakeEngine {
       ctx.fillRect(0, y, W, 1);
     }
   }
+  private drawHUD() {
+    const ctx = this.ctx;
+    const p = this.palette;
+    const lives = this.phase === "gameover" ? 0 : 1;
+    ctx.save();
+    applySkinGlow(ctx, this.currentSkin, p.hud, 8);
+    ctx.fillStyle = p.hud;
+    ctx.font = '15px "Courier New", monospace';
+    ctx.textAlign = "left";
+    ctx.fillText(`SCORE  ${this.score}`, 14, 26);
+    ctx.textAlign = "center";
+    ctx.fillText(`NIVEL ${this.level}`, W / 2, 26);
+    ctx.textAlign = "right";
+    ctx.fillText(`VIDAS: ${lives}`, W - 14, 26);
+    ctx.restore();
+  }
   private drawOverlay(title: string, sub: string) {
     const ctx = this.ctx;
     const p = this.palette;
@@ -410,6 +430,7 @@ export class SnakeEngine {
     this.drawFruit();
     this.drawSnake();
     if (this.currentSkin === "retro") this.drawScanlines();
+    this.drawHUD();
     if (this.phase === "gameover") {
       this.drawOverlay("GAME OVER", `Score final: ${this.score}`);
     }

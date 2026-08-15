@@ -102,6 +102,7 @@ type Palette = {
   overlayDim: string;
   overlayTitle: string;
   overlaySub: string;
+  hud: string;
 };
 const SKIN_PALETTES: Record<SkinName, Palette> = {
   // Pixel-idéntico al port original: sin teñido, sin glow, sin scanlines.
@@ -115,6 +116,7 @@ const SKIN_PALETTES: Record<SkinName, Palette> = {
     overlayDim: "rgba(0, 0, 0, 0.6)",
     overlayTitle: "#f0f0f0",
     overlaySub: "#f0f0f0",
+    hud: "#f0f0f0",
   },
   neon: {
     background: "#06000f",
@@ -132,6 +134,7 @@ const SKIN_PALETTES: Record<SkinName, Palette> = {
     overlayDim: "rgba(6, 0, 15, 0.72)",
     overlayTitle: "#ff006e",
     overlaySub: "#00f5ff",
+    hud: "#00f5ff",
   },
   // CRT de fósforo ámbar: un solo tono, filas diferenciadas por brillo.
   retro: {
@@ -150,6 +153,7 @@ const SKIN_PALETTES: Record<SkinName, Palette> = {
     overlayDim: "rgba(10, 6, 0, 0.7)",
     overlayTitle: "#ffb000",
     overlaySub: "#ffb000",
+    hud: "#ffb000",
   },
 };
 type Brick = {
@@ -592,6 +596,24 @@ export class ArkanoidEngine {
         );
     }
   }
+  private drawHUD() {
+    const ctx = this.ctx;
+    const p = this.palette;
+    ctx.save();
+    if (p.glow > 0) {
+      ctx.shadowBlur = p.glow;
+      ctx.shadowColor = p.hud;
+    }
+    ctx.fillStyle = p.hud;
+    ctx.font = '15px "Courier New", monospace';
+    ctx.textAlign = "left";
+    ctx.fillText(`SCORE  ${this.score}`, 14, 26);
+    ctx.textAlign = "center";
+    ctx.fillText(`NIVEL ${this.currentLevel}`, W / 2, 26);
+    ctx.textAlign = "right";
+    ctx.fillText(`VIDAS: ${this.lives}`, W - 14, 26);
+    ctx.restore();
+  }
   private drawOverlay(title: string, sub: string) {
     const ctx = this.ctx;
     const palette = this.palette;
@@ -621,6 +643,7 @@ export class ArkanoidEngine {
     this.drawPaddle();
     this.drawBall();
     if (this.palette.scanlines) this.drawScanlines();
+    this.drawHUD();
     if (this.phase === "levelup") {
       this.drawOverlay(`Nivel ${this.currentLevel + 1}`, "");
     } else if (this.phase === "gameover") {
