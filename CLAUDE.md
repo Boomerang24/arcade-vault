@@ -24,10 +24,15 @@ Do not jump straight to code for a feature — write or find the spec first. Spe
 
 Before deciding _which_ game to add next, use the `@game-planner` subagent (`.claude/agents/game-planner.md`). It weighs technical fit against the engine contract (`EngineStats`) and category diversity across the catalog, and keeps a persistent, git-tracked memory of suggestions in `references/game-suggestions-todo.md` (Pendientes/Descartadas/Implementadas) so proposals aren't re-derived or repeated across sessions. It **never writes code or specs** — its recommendation feeds into `/add-game`.
 
+### `@game-jam` subagent
+
+Given a theme (a phrase, an aesthetic, a mood), the `@game-jam` subagent (`.claude/agents/game-jam.md`) invents one original game from scratch — no porting from `references/started-games/` — and writes it as **2+ complete specs** in `specs/game-jam/<game-id>/` (a base spec with the minimum playable engine + registry + Supabase row, and a mechanics spec layering power-ups/levels/audio on top), matching the format and depth of specs 07/08/09. It is fully autonomous: it never asks questions, deciding every choice (id/title/cat/color/cover/mechanics/`EngineStats` mapping) itself and recording the reasoning in each spec's "Decisiones tomadas y descartadas". It **never writes code**, never touches `apply_migration`, and never marks a spec `Approved`. Its specs live outside `specs/` until the user reviews them, renumbers if needed, moves them into `specs/`, and runs `/spec-impl` on each in dependency order.
+
 ## Skills
 
 - Use siempre `/frontend-design` para diseñar la interfaz de usuario.
 - `/add-game` para cualquier juego nuevo (ver arriba). Considera invocar `@game-planner` antes, para decidir qué juego conviene.
+- `@game-jam` para prototipar rápido un juego nuevo a partir de un tema, sin preguntas — genera specs de borrador en `specs/game-jam/` para revisar. Úsalo en vez de `/add-game` cuando solo hay un tema y no una descripción concreta ya decidida.
 
 ## Architecture
 
