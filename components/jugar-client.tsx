@@ -8,6 +8,7 @@ import {
   type EngineStats,
   type GameEngineHandle,
 } from "@/lib/games/registry";
+import { MobileFooter } from "@/components/games/mobile-footer";
 export function JugarClient({ game }: { game: Game }) {
   const router = useRouter();
   const { user, saveScore } = useAuth();
@@ -43,6 +44,10 @@ export function JugarClient({ game }: { game: Game }) {
       engineRef.current?.setSkin?.(stored);
     }
   }, [registered, skinStorageKey]);
+  useEffect(() => {
+    document.body.classList.add("is-jugar-screen");
+    return () => document.body.classList.remove("is-jugar-screen");
+  }, []);
   const handleSkinChange = (id: string) => {
     setSkin(id);
     engineRef.current?.setSkin?.(id);
@@ -175,6 +180,14 @@ export function JugarClient({ game }: { game: Game }) {
           <span>CARGA · 1MB</span>
         </div>
       </div>
+      <MobileFooter
+        paused={paused}
+        onTogglePause={togglePause}
+        skins={registered?.skins}
+        skin={skin}
+        onSkinChange={handleSkinChange}
+        onExit={() => router.push(`/juego/${game.id}`)}
+      />
       {over && (
         <div className="modal-bd">
           <div className="modal">
