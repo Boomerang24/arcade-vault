@@ -1,6 +1,6 @@
 # 13 — Apariencia gamepad neón
 
-**Estado:** Approved
+**Estado:** Implemented
 **Depende de:** SPEC 12
 **Fecha:** 2026-08-17
 
