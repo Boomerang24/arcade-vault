@@ -1197,6 +1197,35 @@ a {
   grid-column: 2;
   grid-row: 3;
 }
+.touch-dpad-hub {
+  grid-column: 2;
+  grid-row: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: radial-gradient(circle at 50% 50%, #181822 0%, #08080d 80%);
+  border: 1px solid rgba(0, 245, 255, 0.15);
+  border-radius: 6px;
+  box-shadow:
+    inset 0 0 12px rgba(0, 0, 0, 0.8),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
+}
+.touch-dpad-hub-gem {
+  width: 12px;
+  height: 12px;
+  background: var(--cyan);
+  box-shadow:
+    0 0 10px var(--cyan),
+    inset 0 0 4px rgba(0, 0, 0, 0.5);
+  clip-path: polygon(50% 0, 100% 50%, 50% 100%, 0 50%);
+  animation: touch-dpad-pulse-led 2s ease-in-out infinite;
+}
+@keyframes touch-dpad-pulse-led {
+  50% {
+    opacity: 0.35;
+    transform: scale(0.85);
+  }
+}
 .touch-dpad button:disabled {
   opacity: 0.25;
   cursor: default;

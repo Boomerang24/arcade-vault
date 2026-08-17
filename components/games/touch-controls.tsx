@@ -102,6 +102,9 @@ export function TouchControls({ actions, directions }: TouchControlsProps) {
         >
           <span className="touch-dpad-arrow touch-dpad-arrow-down">▲</span>
         </button>
+        <div className="touch-dpad-hub" aria-hidden="true">
+          <span className="touch-dpad-hub-gem" />
+        </div>
       </div>
       {actions.length > 0 && (
         <div className="touch-actions">
