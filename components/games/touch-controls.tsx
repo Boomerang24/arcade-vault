@@ -76,7 +76,9 @@ export function TouchControls({ actions, directions }: TouchControlsProps) {
           disabled={!dirs.up}
           {...pressHandlers("ArrowUp")}
         >
-          <span className="touch-dpad-arrow">▲</span>
+          <svg className="touch-dpad-arrow-svg" viewBox="0 0 24 24">
+            <path d="M12 4 L20 16 L4 16 Z" fill="currentColor" />
+          </svg>
         </button>
         <button
           type="button"
@@ -84,7 +86,12 @@ export function TouchControls({ actions, directions }: TouchControlsProps) {
           disabled={!dirs.left}
           {...pressHandlers("ArrowLeft")}
         >
-          <span className="touch-dpad-arrow touch-dpad-arrow-left">▲</span>
+          <svg
+            className="touch-dpad-arrow-svg touch-dpad-arrow-left"
+            viewBox="0 0 24 24"
+          >
+            <path d="M12 4 L20 16 L4 16 Z" fill="currentColor" />
+          </svg>
         </button>
         <button
           type="button"
@@ -92,7 +99,12 @@ export function TouchControls({ actions, directions }: TouchControlsProps) {
           disabled={!dirs.right}
           {...pressHandlers("ArrowRight")}
         >
-          <span className="touch-dpad-arrow touch-dpad-arrow-right">▲</span>
+          <svg
+            className="touch-dpad-arrow-svg touch-dpad-arrow-right"
+            viewBox="0 0 24 24"
+          >
+            <path d="M12 4 L20 16 L4 16 Z" fill="currentColor" />
+          </svg>
         </button>
         <button
           type="button"
@@ -100,7 +112,12 @@ export function TouchControls({ actions, directions }: TouchControlsProps) {
           disabled={!dirs.down}
           {...pressHandlers("ArrowDown")}
         >
-          <span className="touch-dpad-arrow touch-dpad-arrow-down">▲</span>
+          <svg
+            className="touch-dpad-arrow-svg touch-dpad-arrow-down"
+            viewBox="0 0 24 24"
+          >
+            <path d="M12 4 L20 16 L4 16 Z" fill="currentColor" />
+          </svg>
         </button>
         <div className="touch-dpad-hub" aria-hidden="true">
           <span className="touch-dpad-hub-gem" />

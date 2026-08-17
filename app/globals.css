@@ -1164,13 +1164,10 @@ a {
 .touch-action-btn::before {
   display: none;
 }
-.touch-dpad-arrow {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  line-height: 1;
+.touch-dpad-arrow-svg {
+  width: 22px;
+  height: 22px;
+  transition: filter 140ms;
 }
 .touch-dpad-arrow-left {
   transform: rotate(-90deg);
