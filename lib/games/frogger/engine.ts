@@ -550,4 +550,46 @@ export class FroggerEngine {
       this.rafId = requestAnimationFrame(this.loop);
     }
   };
+  pause(): void {
+    if (this.paused) return;
+    this.paused = true;
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+  }
+  resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    this.lastFrameTime = performance.now();
+    this.rafId = requestAnimationFrame(this.loop);
+  }
+  reset(): void {
+    this.initState();
+    if (this.paused) {
+      this.paused = false;
+    }
+    this.lastFrameTime = performance.now();
+    if (this.rafId === null) {
+      this.rafId = requestAnimationFrame(this.loop);
+    }
+  }
+  forceGameOver(): void {
+    if (this.phase === "gameover") return;
+    this.phase = "gameover";
+    this.lives = 0;
+    this.triggerGameOver();
+    this.draw();
+    this.callbacks.onStats({
+      score: this.score,
+      lives: 0,
+      level: this.level,
+      state: "gameover",
+    });
+  }
+  destroy(): void {
+    this.destroyed = true;
+    this.pause();
+    window.removeEventListener("keydown", this.handleKeyDown);
+  }
 }
