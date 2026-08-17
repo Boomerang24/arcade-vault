@@ -151,47 +151,29 @@ No se introducen nuevas tablas ni tipos TypeScript en `lib/`. El guardado de sco
    - Cada nivel incrementa todas las velocidades en un 15 %.
      Verificación: en cada carril hay al menos 2 entidades y los huecos son transitables (comprobable con un `console.log` temporal, removido antes de dar el paso por terminado).
 
-4. **Game loop principal** con `requestAnimationFrame` (patrón `loop = (now) => { update(now); draw(); callbacks.onStats(...); if (!paused) rafId = requestAnimationFrame(loop) }`, igual que `SnakeEngine`):
-   - `update(dt)`:
-     - Si está en pausa lógica, no se llama (el `rafId` se cancela en `pause()`, igual que el resto de motores).
-     - Avanzar posición de cada entidad en su carril (`entity.col += lane.speed * lane.dir * dt / 16`); cuando una entidad sale del borde, se reintroduce por el lado opuesto (`col = -entity.width` o `col = COLS`).
-     - Si la rana no está animando: comprobar input (`pendingDir`); si hay dirección pendiente, iniciar animación (`animating = true`, `animT = 0`, calcular `targetCol/targetRow`).
-     - Si la rana está animando: avanzar `animT += dt`; si `animT >= 120`, completar salto (`col = targetCol`, `row = targetRow`, `animating = false`), resolver lógica de celda destino (detección de muerte/meta/puntuación).
-     - Si la rana está en el río y no animando: aplicar el desplazamiento horizontal de la entidad sobre la que descansa (se verifica con `getSupport(frog, lanes)`).
-     - Decrementar temporizador de ronda; si llega a 0, muerte por tiempo.
-
-   - `draw()`:
-     - Fondo por zonas: negro para carretera, azul oscuro para río, verde oscuro para filas seguras, verde claro para bocas destino.
-     - Dibujar entidades de cada carril: coches (rectángulo rojo/amarillo/azul con ruedas circulares), camiones (rectángulo gris con cabina diferenciada), troncos (rectángulo marrón con textura de líneas), tortugas visibles (círculo verde con patrón de escamas), tortugas sumergidas (contorno semitransparente).
-     - Dibujar rana: cuerpo verde brillante (elipse 28×24 px) con ojos blancos/negros (dos círculos), patas extendidas durante animación de salto.
-     - Dibujar bocas destino: rectángulo de meta verde oscuro con borde dorado; si ocupada, dibujar silueta de rana dentro.
-     - HUD interno: score top-left (fuente blanca 16 px), nivel top-center, iconos de rana top-right (un círculo verde por vida), barra de tiempo (rectángulo en fila 0, anchura proporcional al tiempo restante, color verde → amarillo → rojo).
-
-5. **Detección de colisiones y soporte**:
+4. **Game loop, colisiones, rondas y renderizado** (implementados juntos: en la práctica el loop no puede correr sin resolver colisión/soporte/meta en cada aterrizaje de salto, y esa resolución no puede correr sin `killFrog`/`completeRound` — separarlos en pasos habría dejado código no funcional entre revisiones):
+   - **Loop** con `requestAnimationFrame` (patrón `loop = (now) => { update(dt); draw(); callbacks.onStats(...); if (!paused) rafId = requestAnimationFrame(loop) }`, igual que `SnakeEngine`), arrancado desde el constructor.
+   - `update(dt)` delega en tres métodos privados:
+     - `updateEntities(dt)`: avanza `entity.col += lane.speed * lane.dir * dt / 16` en cada carril; al salir del borde se reintroduce por el lado opuesto (`col = -entity.width` o `col = COLS`); además avanza `turtleCycleT` y calcula `entity.submerged` por tortuga con un offset por índice (`(i * 700) % ciclo`) para desincronizar grupos.
+     - `updateFrog(dt)`: si la rana está animando, avanza `animT`; al llegar a `JUMP_MS` (120) completa el salto y llama `resolveFrogCell()`. Si no está animando, consume `pendingDir` (ignorando el salto si el destino cae fuera de `[0, COLS)` en columna o de `[0, ROW_START]` en fila — la rana no puede salir de los bordes laterales). Si está en el río y quieta, aplica el arrastre del soporte (`getSupport`) y mata a la rana si el arrastre la saca de `[0, COLS)`.
+     - `updateRoundTimer(dt)`: decrementa el temporizador de ronda (pausado mientras la rana anima); si llega a 0, `killFrog()`.
+   - `resolveFrogCell()` (llamado al aterrizar un salto): otorga +10 pts si `frog.row` mejora el mínimo alcanzado en la ronda (`minRowReached`); si la fila es de carretera llama a `checkRoadCollision`; si es de río llama a `getSupport` (sin soporte = muerte); si es la fila de metas llama a `checkGoal()`.
    - `checkRoadCollision(frog, lanes)`: itera entidades de carriles de carretera; si `frog.col` está dentro del rango `[entity.col, entity.col + entity.width)` y `frog.row === lane.row`, devuelve `true`.
    - `getSupport(frog, lanes)`: itera entidades de carriles de río; devuelve la entidad cuyo rango cubre la columna de la rana en el mismo carril, o `null`. Si la entidad es una tortuga con `submerged === true`, devuelve `null` (sin soporte).
-   - `checkGoal(frog, goals)`: si `frog.row === ROW_GOALS`, calcula la boca que corresponde a `frog.col`; si no está ocupada, la marca y suma puntos; si ya estaba ocupada o `frog.col` no es una boca, es muerte.
+   - `checkGoal()`: calcula la boca que corresponde a `frog.col` contra `GOAL_COLS` (5 rangos de 2 columnas, con 1 columna de "muro" letal entre cada una); si la columna no cae en ninguna boca o la boca ya está ocupada, `killFrog()`; si no, la marca, suma `+50` más el bonus de tiempo (`Math.floor(roundTimer / 1000) * 10`), y si las 5 quedan ocupadas suma `+200` y llama `completeRound()` — si no, reaparece la rana en la fila de inicio para el siguiente salto y se resetea el temporizador.
+   - `completeRound()`: resetea la posición de la rana a `ROW_START` columna central, vacía las bocas, incrementa `level`, reconstruye los carriles con `buildLanes(level)` y resetea el temporizador.
+   - `killFrog()`: decrementa `lives`; si llega a 0 entra en `phase = "gameover"` y llama `callbacks.onGameOver(score)` vía `triggerGameOver()` (con guarda `gameOverNotified`, igual que `SnakeEngine`, para evitar doble notificación); si quedan vidas, reaparece la rana en la fila de inicio y resetea el temporizador.
+   - `draw()`: fondo por zonas (negro carretera, azul oscuro río, verde oscuro filas seguras, verde oscuro fila de metas), entidades por carril (coches/camiones con ruedas, troncos con textura de líneas, tortugas con fade al sumergirse), bocas destino (borde dorado, silueta elipse verde si ocupada), rana (elipse verde con ojos, interpolada entre celda origen/destino durante el salto), HUD interno (score/nivel/vidas en texto, barra de tiempo verde→amarillo→rojo en la fila superior), overlay de game over.
+     Verificación: la rana se mueve, choca, se ahoga, llega a metas y completa rondas correctamente jugando manualmente una vez el juego esté cableado en el paso 6.
 
-6. **Gestión de ronda completada** — método privado `completeRound()`:
-   - Resetea la posición de la rana a `ROW_START`, columna central.
-   - Vacía las bocas ocupadas.
-   - Incrementa `level`.
-   - Reconstruye los carriles con `buildLanes(level)`.
-   - Resetea el temporizador.
+5. **Implementar `pause/resume/reset/forceGameOver/destroy`** en `FroggerEngine`, calcados 1:1 del patrón de `SnakeEngine` (cancelar/retomar `rafId`, `initState()` para `reset()`, `triggerGameOver` reentrante para `forceGameOver()`, remover el listener `keydown` en `destroy()`).
 
-7. **Gestión de muerte** — método privado `killFrog()`:
-   - Decrementa `lives`.
-   - Si `lives === 0`: entra en `state = "gameover"`, llama `callbacks.onGameOver(score)`, detiene el loop (mismo patrón `triggerGameOver`/`gameOverNotified` que `SnakeEngine`, para evitar doble notificación).
-   - Si `lives > 0`: resetea la posición de la rana a `ROW_START`, columna central; resetea temporizador.
+6. **Crear `components/games/frogger-canvas.tsx`** — copia del patrón de `snake-canvas.tsx`: `forwardRef<GameEngineHandle, GameCanvasProps>`, instancia `FroggerEngine` en un `useEffect` con cleanup `engine.destroy()`, expone `pause/resume/reset/forceGameOver` vía `useImperativeHandle` (sin `setSkin`, ya que este spec no añade skins). Canvas con `width={640} height={560}`, mismo estilo `position: absolute; inset: 0; width: 100%; height: 100%` que los demás.
 
-8. **Implementar `pause/resume/reset/forceGameOver/destroy`** en `FroggerEngine`, calcados 1:1 del patrón de `SnakeEngine` (cancelar/retomar `rafId`, `initState()` para `reset()`, `triggerGameOver` reentrante para `forceGameOver()`, remover el listener `keydown` en `destroy()`).
+7. **Registrar en `lib/games/registry.ts`**: añadir el import de `FroggerCanvas`/`FroggerCanvasHandle` y la entrada `frogger: { Canvas: FroggerCanvas }` en `GAME_REGISTRY`, y reexportar `FroggerCanvasHandle` junto a los demás handles.
+   Verificación: `/juego/frogger/jugar` renderiza el canvas de Frogger a través de `jugar-client.tsx` sin tocar ese archivo; el HUD React refleja score, vidas y nivel en tiempo real; pausa/reanudar/reinicio/guardado de score funcionan igual que en cualquier otro juego del catálogo.
 
-9. **Crear `components/games/frogger-canvas.tsx`** — copia del patrón de `snake-canvas.tsx`: `forwardRef<GameEngineHandle, GameCanvasProps>`, instancia `FroggerEngine` en un `useEffect` con cleanup `engine.destroy()`, expone `pause/resume/reset/forceGameOver` vía `useImperativeHandle` (sin `setSkin`, ya que este spec no añade skins). Canvas con `width={640} height={560}`, mismo estilo `position: absolute; inset: 0; width: 100%; height: 100%` que los demás.
-
-10. **Registrar en `lib/games/registry.ts`**: añadir el import de `FroggerCanvas`/`FroggerCanvasHandle` y la entrada `frogger: { Canvas: FroggerCanvas }` en `GAME_REGISTRY`, y reexportar `FroggerCanvasHandle` junto a los demás handles.
-    Verificación: `/juego/frogger/jugar` renderiza el canvas de Frogger a través de `jugar-client.tsx` sin tocar ese archivo; el HUD React refleja score, vidas y nivel en tiempo real; pausa/reanudar/reinicio/guardado de score funcionan igual que en cualquier otro juego del catálogo.
-
-11. **Verificación final** — `npm run build` termina sin errores de TypeScript. Ninguna ruta existente devuelve 500.
+8. **Verificación final** — `npm run build` termina sin errores de TypeScript. Ninguna ruta existente devuelve 500.
 
 ---
 
