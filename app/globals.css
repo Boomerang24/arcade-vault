@@ -1298,6 +1298,22 @@ a {
   font-size: 14px;
   margin: 0;
 }
+.touch-action-ring {
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 1px dashed currentColor;
+  opacity: 0;
+  transform: scale(1);
+  transition:
+    opacity 140ms,
+    transform 200ms;
+  pointer-events: none;
+}
+.touch-action-btn:active .touch-action-ring {
+  opacity: 1;
+  transform: scale(1.08);
+}
 .tetris-board-canvas {
   border: 1px solid rgba(0, 245, 255, 0.4);
   border-radius: 4px;

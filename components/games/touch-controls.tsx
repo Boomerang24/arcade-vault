@@ -132,6 +132,7 @@ export function TouchControls({ actions, directions }: TouchControlsProps) {
               className="btn touch-action-btn"
               {...pressHandlers(action.code)}
             >
+              <span className="touch-action-ring" aria-hidden="true" />
               {action.label}
             </button>
           ))}
