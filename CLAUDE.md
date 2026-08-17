@@ -32,12 +32,17 @@ Given a theme (a phrase, an aesthetic, a mood), the `@game-jam` subagent (`.clau
 
 Given the name or id of **one** game, the `@skin-designer` subagent (`.claude/agents/skin-designer.md`) guarantees that game has at least 3 visual skins — `classic` (default, the original look), `neon`, `retro` — by refactoring its engine's color literals into a `SKIN_PALETTES` table (the pattern Tetris already established) and wiring the shared skin selector in `jugar-client.tsx`/`lib/games/registry.ts`. It is the **only one of these three subagents that writes code**: adding skins is a bounded paint-layer refactor of an existing engine, not a new product feature, so it deliberately skips `/spec`/`/spec-impl`. It acts on **one game per run** — it never sweeps the whole catalog — and never extends `EngineStats`, changes mechanics, or adds new sprite assets (spritesheets are tinted at runtime instead). It keeps a persistent, git-tracked memory of which games already have skins and their exact palettes in `references/game-with-themes.md`, so the direction isn't re-derived per session.
 
+### `@mobile-porter` subagent
+
+Dado el nombre o id de **un** juego, el `@mobile-porter` subagent (`.claude/agents/mobile-porter.md`) le añade soporte táctil móvil replicando el patrón ya aprobado e implementado por la spec 12 (`specs/12-controles-tactiles-moviles.md`) en `asteroides`, `tetris`, `arkanoid` y `snake`: registra sus `touchActions` en `GAME_REGISTRY`, añade su fila al mapa `TOUCH_DIRECTIONS` de `jugar-client.tsx`, y si el motor no dibuja estadísticas en vivo le agrega un `drawHUD()` calcado del de `arkanoid`/`snake`. Es el segundo subagente de estos que **sí escribe código** (junto a `@skin-designer`), por la misma razón: es un cableado acotado de la capa de presentación, no una feature de producto, así que se salta `/spec`/`/spec-impl`. Cablea siempre en la play-page — **nunca toca `components/games/<id>-canvas.tsx`** ni reescribe `touch-controls.tsx`/`mobile-footer.tsx`, que son infraestructura compartida ya terminada. Actúa **un juego por corrida** y mantiene memoria persistente de qué juegos ya están portados en `references/mobile-ported-games.md`. Un juego nuevo en el catálogo no se considera terminado hasta pasar por `@mobile-porter` (riesgo anotado en la propia spec 12: sin `drawHUD()`, un juego nuevo se queda sin estadísticas visibles en móvil).
+
 ## Skills
 
 - Use siempre `/frontend-design` para diseñar la interfaz de usuario.
 - `/add-game` para cualquier juego nuevo (ver arriba). Considera invocar `@game-planner` antes, para decidir qué juego conviene.
 - `@game-jam` para prototipar rápido un juego nuevo a partir de un tema, sin preguntas — genera specs de borrador en `specs/game-jam/` para revisar. Úsalo en vez de `/add-game` cuando solo hay un tema y no una descripción concreta ya decidida.
 - `@skin-designer <juego>` para dotar a un juego existente de al menos 3 skins (classic/neon/retro). Escribe código directamente, un juego por corrida — no genera spec.
+- `@mobile-porter <juego>` para darle soporte táctil móvil a un juego del catálogo (gamepad, MobileFooter, HUD en canvas), siguiendo el patrón de la spec 12. Escribe código directamente, un juego por corrida — no genera spec.
 
 ## Architecture
 
