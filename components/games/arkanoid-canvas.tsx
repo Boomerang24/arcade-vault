@@ -45,6 +45,7 @@ export const ArkanoidCanvas = forwardRef<ArkanoidCanvasHandle, Props>(
         ref={canvasRef}
         width={800}
         height={600}
+        className="arkanoid-board-canvas"
         style={{
           position: "absolute",
           inset: 0,

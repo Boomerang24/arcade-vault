@@ -37,11 +37,16 @@ export type SkinOption = { id: string; label: string };
 // del array es el default). Impuesto por convención, no por el tipo, para
 // no romper juegos que aún no tienen skins.
 export const REQUIRED_SKINS = ["classic", "neon", "retro"] as const;
+export type TouchAction = {
+  code: "Space"; // por ahora el único code de acción usado en el catálogo
+  label: string; // texto corto del botón, p.ej. "DISPARAR", "CAER"
+};
 export type RegisteredGame = {
   Canvas: ForwardRefExoticComponent<
     GameCanvasProps & RefAttributes<GameEngineHandle>
   >;
   skins?: SkinOption[];
+  touchActions?: TouchAction[]; // 0, 1 o 2 botones de acción; ausente/[] = solo D-pad
 };
 export const GAME_REGISTRY: Record<string, RegisteredGame> = {
   asteroides: {
@@ -51,6 +56,7 @@ export const GAME_REGISTRY: Record<string, RegisteredGame> = {
       { id: "neon", label: "Neon" },
       { id: "retro", label: "Retro" },
     ],
+    touchActions: [{ code: "Space", label: "DISPARAR" }],
   },
   tetris: {
     Canvas: TetrisCanvas,
@@ -61,6 +67,7 @@ export const GAME_REGISTRY: Record<string, RegisteredGame> = {
       { id: "pastel", label: "Pastel" },
       { id: "pixelart", label: "Pixel Art" },
     ],
+    touchActions: [{ code: "Space", label: "CAER" }],
   },
   arkanoid: {
     Canvas: ArkanoidCanvas,
