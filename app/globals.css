@@ -1264,33 +1264,8 @@ a {
   text-align: center;
 }
 .touch-action-btn:nth-child(1) {
-  border-color: var(--cyan);
-  margin-bottom: 22px;
-  background:
-    radial-gradient(
-      circle at 32% 26%,
-      rgba(255, 255, 255, 0.25),
-      transparent 50%
-    ),
-    radial-gradient(
-      circle at 50% 55%,
-      rgba(0, 200, 230, 0.7),
-      rgba(0, 50, 70, 0.95) 75%
-    );
-}
-.touch-action-btn:nth-child(1):hover {
-  color: var(--cyan);
-}
-.touch-action-btn:nth-child(1):active {
-  color: var(--cyan);
-  text-shadow:
-    0 0 8px var(--cyan),
-    0 0 18px var(--cyan);
-  box-shadow: 0 0 36px rgba(0, 245, 255, 0.4);
-}
-.touch-action-btn:nth-child(2) {
   border-color: var(--magenta);
-  margin-top: 22px;
+  margin-bottom: 22px;
   background:
     radial-gradient(
       circle at 32% 26%,
@@ -1303,15 +1278,40 @@ a {
       rgba(110, 0, 40, 0.95) 75%
     );
 }
-.touch-action-btn:nth-child(2):hover {
+.touch-action-btn:nth-child(1):hover {
   color: var(--magenta);
 }
-.touch-action-btn:nth-child(2):active {
+.touch-action-btn:nth-child(1):active {
   color: var(--magenta);
   text-shadow:
     0 0 8px var(--magenta),
     0 0 18px var(--magenta);
   box-shadow: 0 0 36px rgba(255, 0, 110, 0.4);
+}
+.touch-action-btn:nth-child(2) {
+  border-color: var(--cyan);
+  margin-top: 22px;
+  background:
+    radial-gradient(
+      circle at 32% 26%,
+      rgba(255, 255, 255, 0.25),
+      transparent 50%
+    ),
+    radial-gradient(
+      circle at 50% 55%,
+      rgba(0, 200, 230, 0.7),
+      rgba(0, 50, 70, 0.95) 75%
+    );
+}
+.touch-action-btn:nth-child(2):hover {
+  color: var(--cyan);
+}
+.touch-action-btn:nth-child(2):active {
+  color: var(--cyan);
+  text-shadow:
+    0 0 8px var(--cyan),
+    0 0 18px var(--cyan);
+  box-shadow: 0 0 36px rgba(0, 245, 255, 0.4);
 }
 .touch-action-btn:only-child {
   width: 128px;
