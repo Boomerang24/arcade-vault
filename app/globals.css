@@ -1164,6 +1164,20 @@ a {
 .touch-action-btn::before {
   display: none;
 }
+.touch-dpad button:hover {
+  color: var(--cyan);
+}
+.touch-dpad button:active {
+  color: var(--cyan);
+  background: linear-gradient(180deg, #08161e, #030a0e);
+  border-color: var(--cyan);
+  box-shadow:
+    inset 0 0 16px rgba(0, 245, 255, 0.45),
+    0 0 16px rgba(0, 245, 255, 0.5);
+}
+.touch-dpad button:active .touch-dpad-arrow-svg {
+  filter: drop-shadow(0 0 6px var(--cyan)) drop-shadow(0 0 12px var(--cyan));
+}
 .touch-dpad-arrow-svg {
   width: 22px;
   height: 22px;
@@ -1256,12 +1270,26 @@ a {
 .touch-action-btn:nth-child(1):hover {
   color: var(--cyan);
 }
+.touch-action-btn:nth-child(1):active {
+  color: var(--cyan);
+  text-shadow:
+    0 0 8px var(--cyan),
+    0 0 18px var(--cyan);
+  box-shadow: 0 0 36px rgba(0, 245, 255, 0.4);
+}
 .touch-action-btn:nth-child(2) {
   border-color: var(--magenta);
   margin-top: 22px;
 }
 .touch-action-btn:nth-child(2):hover {
   color: var(--magenta);
+}
+.touch-action-btn:nth-child(2):active {
+  color: var(--magenta);
+  text-shadow:
+    0 0 8px var(--magenta),
+    0 0 18px var(--magenta);
+  box-shadow: 0 0 36px rgba(255, 0, 110, 0.4);
 }
 .touch-action-btn:only-child {
   width: 128px;
