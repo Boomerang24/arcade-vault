@@ -326,15 +326,17 @@ export class FroggerEngine {
     this.pendingDir = dir;
   };
   // ---- lógica de colisión y soporte ----
+  // Solapa el intervalo continuo [entity.col, entity.col+width) de la entidad
+  // con la celda entera [frog.col, frog.col+1) de la rana.
+  private overlapsFrog(frog: Frog, entity: Entity): boolean {
+    return frog.col < entity.col + entity.width && frog.col + 1 > entity.col;
+  }
   private checkRoadCollision(frog: Frog, lanes: Lane[]): boolean {
     return lanes.some(
       (lane) =>
         lane.row === frog.row &&
         ROAD_ROWS.includes(lane.row) &&
-        lane.entities.some(
-          (entity) =>
-            frog.col >= entity.col && frog.col < entity.col + entity.width,
-        ),
+        lane.entities.some((entity) => this.overlapsFrog(frog, entity)),
     );
   }
   private getSupport(frog: Frog, lanes: Lane[]): Entity | null {
@@ -342,9 +344,7 @@ export class FroggerEngine {
       (l) => l.row === frog.row && RIVER_ROWS.includes(l.row),
     );
     if (!lane) return null;
-    const entity = lane.entities.find(
-      (e) => frog.col >= e.col && frog.col < e.col + e.width,
-    );
+    const entity = lane.entities.find((e) => this.overlapsFrog(frog, e));
     if (!entity) return null;
     if (entity.type === "turtle" && entity.submerged) return null;
     return entity;
@@ -484,6 +484,13 @@ export class FroggerEngine {
           this.killFrog();
         }
       }
+      return;
+    }
+    if (
+      ROAD_ROWS.includes(frog.row) &&
+      this.checkRoadCollision(frog, this.lanes)
+    ) {
+      this.killFrog();
     }
   }
   private updateRoundTimer(dt: number) {
