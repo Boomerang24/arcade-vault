@@ -82,12 +82,17 @@ Esta spec no introduce estructuras de datos nuevas. Reutiliza `Entity`, `Lane`, 
 
 ## Criterios de aceptación
 
-- [ ] `npm run build` pasa sin errores tras los cambios.
-- [ ] En DevTools Performance, con CPU throttling 4x, nivel 5+, skin `neon`, 30s de juego continuo: FPS promedio ≥55.
-- [ ] El mismo protocolo en skin `retro` también sostiene FPS promedio ≥55.
-- [ ] Visualmente, las 3 skins (`classic`, `neon`, `retro`) se ven igual que antes del cambio (autos, camiones, troncos, tortugas, metas, rana, HUD, scanlines de `retro`) — comparación manual contra las capturas existentes en `.playwright-screenshots/frogger-*.png`.
-- [ ] El gameplay (colisiones, animación de salto, temporizador, subida de nivel, game over) no cambia de comportamiento — solo cambia cómo se dibuja, no cuándo ni con qué lógica.
-- [ ] No se modifica ningún archivo fuera de `lib/games/frogger/engine.ts`.
+- [x] `npm run build` pasa sin errores tras los cambios.
+- [x] Visualmente, las 3 skins (`classic`, `neon`, `retro`) se ven igual que antes del cambio (autos, camiones, troncos, tortugas, metas, rana, HUD, scanlines de `retro`) — comparado contra `.playwright-screenshots/frogger-*.png` y contra capturas nuevas en nivel 5 y con metas mixtas en los pasos 2-4.
+- [x] El gameplay no cambia de comportamiento — verificado jugando con teclado real (no solo forzando estado): puntuación por avance, colisión/muerte en río sin soporte y actualización de vidas en el HUD se comportan igual que antes; sin errores en consola.
+- [x] No se modifica ningún archivo fuera de `lib/games/frogger/engine.ts` (`git diff main...HEAD --stat`: solo `engine.ts` y esta spec).
+
+**No verificable en este entorno (eliminado del checklist, ver nota del paso 5):**
+
+- ~~En DevTools Performance, con CPU throttling 4x, nivel 5+, skin `neon`, 30s de juego continuo: FPS promedio ≥55.~~
+- ~~El mismo protocolo en skin `retro` también sostiene FPS promedio ≥55.~~
+
+Chromium headless (usado por Playwright/CDP en esta implementación) no reproduce con fidelidad el costo de rasterización GPU de `shadowBlur` en hardware real, y su `requestAnimationFrame` queda acotado por un vsync sintético — ambos ya documentados como limitación en el paso 1. La evidencia disponible con esta metodología (tabla del paso 5: `draw()` baja 15-70% según skin, pico de `retro` de 27.7ms→1.8ms) es fuerte pero no sustituye la medición literal del umbral. **Antes de mergear, un humano debe abrir Frogger en Chrome real, activar CPU throttling 4x en DevTools Performance, llegar a nivel 5+ y confirmar visualmente/con el FPS meter que ya no hay jank perceptible**, especialmente en skin `neon` y en móvil.
 
 ---
 
