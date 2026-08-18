@@ -584,69 +584,131 @@ export class FroggerEngine {
     });
     ctx.restore();
   }
-  private drawEntity(entity: Entity, row: number) {
+  // Dibuja autos/camiones de un lote en un solo save/shadowBlur/restore en
+  // vez de uno por entidad: cuerpo -> cabina (solo camión) -> ruedas.
+  private drawVehicleBatch(
+    entries: { entity: Entity; row: number }[],
+    type: "car" | "truck",
+  ) {
+    if (entries.length === 0) return;
     const ctx = this.ctx;
     const p = this.palette;
-    const skin = this.currentSkin;
-    const x = entity.col * CELL;
-    const y = row * CELL;
-    const w = entity.width * CELL;
+    const body = type === "truck" ? p.truck : p.car;
     ctx.save();
-    if (entity.type === "car" || entity.type === "truck") {
-      const body = entity.type === "truck" ? p.truck : p.car;
-      applySkinGlow(ctx, skin, body, 12);
-      ctx.fillStyle = body;
+    applySkinGlow(ctx, this.currentSkin, body, 12);
+    ctx.fillStyle = body;
+    for (const { entity, row } of entries) {
+      const x = entity.col * CELL;
+      const y = row * CELL;
+      const w = entity.width * CELL;
       ctx.fillRect(x + 2, y + 6, w - 4, CELL - 12);
-      if (entity.type === "truck") {
-        ctx.fillStyle = p.truckCab;
+    }
+    if (type === "truck") {
+      ctx.fillStyle = p.truckCab;
+      for (const { entity, row } of entries) {
+        const x = entity.col * CELL;
+        const y = row * CELL;
+        const w = entity.width * CELL;
         ctx.fillRect(x + w - CELL + 4, y + 4, CELL - 8, CELL - 8);
       }
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = p.wheel;
+    }
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = p.wheel;
+    ctx.beginPath();
+    for (const { entity, row } of entries) {
+      const x = entity.col * CELL;
+      const y = row * CELL;
+      const w = entity.width * CELL;
       const wheelY = y + CELL - 8;
-      ctx.beginPath();
+      ctx.moveTo(x + 12, wheelY);
       ctx.arc(x + 8, wheelY, 4, 0, Math.PI * 2);
+      ctx.moveTo(x + w - 4, wheelY);
       ctx.arc(x + w - 8, wheelY, 4, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (entity.type === "log") {
-      applySkinGlow(ctx, skin, p.log, 10);
-      ctx.fillStyle = p.log;
+    }
+    ctx.fill();
+    ctx.restore();
+  }
+  // Dibuja troncos de un lote en un solo save/shadowBlur/restore; las
+  // líneas de veta de todos los troncos se agrupan en un solo stroke().
+  private drawLogBatch(entries: { entity: Entity; row: number }[]) {
+    if (entries.length === 0) return;
+    const ctx = this.ctx;
+    const p = this.palette;
+    ctx.save();
+    applySkinGlow(ctx, this.currentSkin, p.log, 10);
+    ctx.fillStyle = p.log;
+    for (const { entity, row } of entries) {
+      const x = entity.col * CELL;
+      const y = row * CELL;
+      const w = entity.width * CELL;
       ctx.fillRect(x + 2, y + 8, w - 4, CELL - 16);
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = p.logGrain;
-      ctx.lineWidth = 1;
+    }
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = p.logGrain;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const { entity, row } of entries) {
+      const x = entity.col * CELL;
+      const y = row * CELL;
+      const w = entity.width * CELL;
       for (let lx = x + 6; lx < x + w - 4; lx += 10) {
-        ctx.beginPath();
         ctx.moveTo(lx, y + 8);
         ctx.lineTo(lx, y + CELL - 8);
-        ctx.stroke();
       }
-    } else {
-      // turtle
-      ctx.globalAlpha = entity.submerged ? 0.25 : 1;
-      applySkinGlow(ctx, skin, p.turtle, 12);
-      ctx.fillStyle = p.turtle;
-      for (let i = 0; i < entity.width; i++) {
-        ctx.beginPath();
-        ctx.arc(
-          x + i * CELL + CELL / 2,
-          y + CELL / 2,
-          CELL / 2 - 4,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
     }
+    ctx.stroke();
+    ctx.restore();
+  }
+  // Dibuja tortugas de un lote en un solo save/shadowBlur/restore; se
+  // separan en dos fill() (visibles / sumergidas) por el globalAlpha.
+  private drawTurtleBatch(entries: { entity: Entity; row: number }[]) {
+    if (entries.length === 0) return;
+    const ctx = this.ctx;
+    const p = this.palette;
+    ctx.save();
+    applySkinGlow(ctx, this.currentSkin, p.turtle, 12);
+    ctx.fillStyle = p.turtle;
+    const fillGroup = (group: { entity: Entity; row: number }[]) => {
+      if (group.length === 0) return;
+      ctx.beginPath();
+      for (const { entity, row } of group) {
+        const x = entity.col * CELL;
+        const y = row * CELL;
+        for (let i = 0; i < entity.width; i++) {
+          const cx = x + i * CELL + CELL / 2;
+          const cy = y + CELL / 2;
+          const r = CELL / 2 - 4;
+          ctx.moveTo(cx + r, cy);
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        }
+      }
+      ctx.fill();
+    };
+    ctx.globalAlpha = 1;
+    fillGroup(entries.filter(({ entity }) => !entity.submerged));
+    ctx.globalAlpha = 0.25;
+    fillGroup(entries.filter(({ entity }) => entity.submerged));
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
   private drawLaneEntities() {
+    const cars: { entity: Entity; row: number }[] = [];
+    const trucks: { entity: Entity; row: number }[] = [];
+    const logs: { entity: Entity; row: number }[] = [];
+    const turtles: { entity: Entity; row: number }[] = [];
     for (const lane of this.lanes) {
       for (const entity of lane.entities) {
-        this.drawEntity(entity, lane.row);
+        const item = { entity, row: lane.row };
+        if (entity.type === "car") cars.push(item);
+        else if (entity.type === "truck") trucks.push(item);
+        else if (entity.type === "log") logs.push(item);
+        else turtles.push(item);
       }
     }
+    this.drawVehicleBatch(cars, "car");
+    this.drawVehicleBatch(trucks, "truck");
+    this.drawLogBatch(logs);
+    this.drawTurtleBatch(turtles);
   }
   private drawFrog() {
     const ctx = this.ctx;
