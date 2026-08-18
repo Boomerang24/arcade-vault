@@ -68,6 +68,24 @@ const GOAL_COLS: [number, number][] = [
   [13, 14],
 ];
 const LEVEL_SPEED_STEP = 0.15; // +15% de velocidad por nivel
+const MAX_GAP_BONUS = 3; // huecos extra en el nivel 1, para arrancar menos denso
+// El nivel 1 suma MAX_GAP_BONUS al hueco base entre entidades; ese extra baja
+// 1 por nivel hasta desaparecer, así la densidad sube de forma progresiva.
+function levelGapBonus(level: number): number {
+  return Math.max(0, MAX_GAP_BONUS - (level - 1));
+}
+const MIN_SPEED_MULT = 0.55; // velocidad al nivel 1: 55% de la base
+const SPEED_RAMP_LEVELS = 4; // niveles que tarda en llegar al 100%
+// El nivel 1 arranca a MIN_SPEED_MULT de la velocidad base y sube en línea
+// recta hasta 1 en SPEED_RAMP_LEVELS; de ahí en más el multiplicador es 1 y
+// el nivel escala normalmente vía LEVEL_SPEED_STEP.
+function levelSpeedRampMult(level: number): number {
+  if (level >= SPEED_RAMP_LEVELS) return 1;
+  return (
+    MIN_SPEED_MULT +
+    ((1 - MIN_SPEED_MULT) * (level - 1)) / (SPEED_RAMP_LEVELS - 1)
+  );
+}
 const TURTLE_VISIBLE_MS = 3000;
 const TURTLE_SUBMERGED_MS = 1500;
 const ROUND_TIME_MS = 15000;
@@ -213,10 +231,13 @@ const DIRECTION_DELTA: Record<Direction, { x: number; y: number }> = {
 function buildRoadLane(row: number, index: number, level: number): Lane {
   const dir: 1 | -1 = index % 2 === 0 ? -1 : 1;
   const baseSpeed = 1.5 + (index % 3) * 1.25; // 1.5 - 4 px/frame base
-  const speed = baseSpeed * (1 + (level - 1) * LEVEL_SPEED_STEP);
+  const speed =
+    baseSpeed *
+    (1 + (level - 1) * LEVEL_SPEED_STEP) *
+    levelSpeedRampMult(level);
   const vehicleType: "car" | "truck" = index % 2 === 0 ? "car" : "truck";
   const width = vehicleType === "truck" ? 3 : 1 + (index % 2);
-  const gap = 4;
+  const gap = 6 + levelGapBonus(level);
   const entities: Entity[] = [];
   for (let col = -width; col < COLS + width; col += width + gap) {
     entities.push({ col, width, type: vehicleType });
@@ -227,12 +248,15 @@ function buildRoadLane(row: number, index: number, level: number): Lane {
 function buildRiverLane(row: number, index: number, level: number): Lane {
   const dir: 1 | -1 = index % 2 === 0 ? 1 : -1;
   const baseSpeed = 1 + (index % 3) * 1; // 1 - 3 px/frame base
-  const speed = baseSpeed * (1 + (level - 1) * LEVEL_SPEED_STEP);
+  const speed =
+    baseSpeed *
+    (1 + (level - 1) * LEVEL_SPEED_STEP) *
+    levelSpeedRampMult(level);
   const isTurtleLane = index % 2 === 1;
   const entities: Entity[] = [];
   if (isTurtleLane) {
     const groupSize = 2 + (index % 2); // 2-3 tortugas por grupo
-    const gap = 4;
+    const gap = 4 + levelGapBonus(level);
     for (let col = -groupSize; col < COLS + groupSize; col += groupSize + gap) {
       entities.push({
         col,
@@ -243,7 +267,7 @@ function buildRiverLane(row: number, index: number, level: number): Lane {
     }
   } else {
     const width = 2 + (index % 3); // 2-4 celdas
-    const gap = 3;
+    const gap = 3 + levelGapBonus(level);
     for (let col = -width; col < COLS + width; col += width + gap) {
       entities.push({ col, width, type: "log" });
     }
