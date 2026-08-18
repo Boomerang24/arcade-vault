@@ -63,7 +63,20 @@ Esta spec no introduce estructuras de datos nuevas. Reutiliza `Entity`, `Lane`, 
 3. Aplicar el mismo agrupamiento en `drawGoals()` (5 metas) y evaluar si `drawFrog()` necesita su propio `save`/`restore` aislado (probablemente sí, por ser una sola shape con múltiples colores). Verificación manual: metas y rana se ven idénticas.
 4. Implementar el cacheo de `drawScanlines()`: crear el buffer offscreen una vez al construir el engine o al cambiar a skin `retro`, dibujar las líneas ahí una sola vez, y sustituir el cuerpo de `drawScanlines()` por un `ctx.drawImage()` del buffer. Verificación manual: skin `retro` se ve visualmente igual (scanlines presentes).
 5. Repetir la medición del paso 1 con el mismo protocolo y comparar contra el baseline. Si no se alcanza ≥55 FPS, iterar sobre los pasos 2-4 antes de cerrar la spec (no se agregan técnicas nuevas fuera de las ya descritas sin actualizar esta spec primero).
-6. Medir también skin `retro` con el mismo protocolo (nivel 5+, throttling 4x, 30s) para confirmar que el cacheo de scanlines no dejó una regresión ahí.
+
+   **Medición final (2026-08-18, mismo protocolo que el baseline del paso 1: `draw()` aislado ×300, nivel 5, 39 entidades, CDP throttle 4x):**
+
+   | Skin    | `draw()` antes → después | reducción | máximo antes → después |
+   | ------- | ------------------------ | --------- | ---------------------- |
+   | classic | 0.11 ms → 0.10 ms        | ~15%      | 1.10 ms → 1.00 ms      |
+   | neon    | 0.16 ms → 0.09 ms        | ~46%      | 2.20 ms → 0.90 ms      |
+   | retro   | 0.27 ms → 0.08 ms        | ~70%      | 27.70 ms → 1.80 ms     |
+
+   `update()` se mantiene igual (0.012 ms → 0.005 ms, dentro del ruido de medición) — confirma que no se tocó lógica, solo render, como establece el Alcance.
+
+   **Sobre el umbral literal de aceptación (≥55 FPS en DevTools Performance, 30s de juego):** no se pudo medir así en este entorno headless — ya documentado en el paso 1, el throttling de CDP no reproduce con fidelidad el costo de rasterización GPU de `shadowBlur` en hardware real, y `requestAnimationFrame` en Chromium headless queda acotado por un vsync sintético (~120 Hz) que no refleja el costo real de un frame. Lo que sí se puede afirmar con esta metodología: los tres cambios (pasos 2-4) redujeron el costo de `draw()` medido en un 15-70% según la skin, eliminaron el pico de 27.7ms de `retro` (bajó a 1.8ms), y el costo total por frame (`draw()` + `update()`) quedó muy por debajo del presupuesto de 16.6ms incluso bajo throttle 4x. La verificación final del umbral de 55 FPS en un dispositivo o navegador real (no headless) queda pendiente y debe hacerla un humano con DevTools antes de mergear — ver criterios de aceptación.
+
+6. Medir también skin `retro` con el mismo protocolo (nivel 5+, throttling 4x, 30s) para confirmar que el cacheo de scanlines no dejó una regresión ahí. (Incluido en la tabla del paso 5: `retro` mejoró, no regresó.)
 
 ---
 
