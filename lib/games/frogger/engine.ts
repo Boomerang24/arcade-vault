@@ -539,13 +539,29 @@ export class FroggerEngine {
     if (row === ROW_SAFE_MID || row === ROW_START) return p.zoneSafe;
     return p.zoneRoad;
   }
+  // Buffer offscreen con las scanlines pre-renderizadas: se dibuja una
+  // sola vez y luego cada frame solo hace drawImage() del buffer, en vez
+  // de repetir ~190 fillRect por frame. No depende de la skin (siempre el
+  // mismo patrón), así que se cachea para toda la vida del engine.
+  private scanlinesBuffer: HTMLCanvasElement | null = null;
+  private getScanlinesBuffer(): HTMLCanvasElement {
+    if (this.scanlinesBuffer) return this.scanlinesBuffer;
+    const buffer = document.createElement("canvas");
+    buffer.width = W;
+    buffer.height = H;
+    const bctx = buffer.getContext("2d");
+    if (bctx) {
+      bctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+      for (let y = 0; y < H; y += 3) {
+        bctx.fillRect(0, y, W, 1);
+      }
+    }
+    this.scanlinesBuffer = buffer;
+    return buffer;
+  }
   // Textura CRT de la skin `retro`: scanlines horizontales sutiles.
   private drawScanlines() {
-    const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
-    for (let y = 0; y < H; y += 3) {
-      ctx.fillRect(0, y, W, 1);
-    }
+    this.ctx.drawImage(this.getScanlinesBuffer(), 0, 0);
   }
   private drawZones() {
     const ctx = this.ctx;
