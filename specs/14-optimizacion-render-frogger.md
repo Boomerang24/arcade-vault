@@ -1,6 +1,6 @@
 # 14 — Optimización de render en Frogger
 
-**Estado:** Approved
+**Estado:** Implemented
 **Depende de:** SPEC 12, SPEC 13
 **Fecha:** 2026-08-17
 
@@ -126,3 +126,45 @@ Chromium headless (usado por Playwright/CDP en esta implementación) no reproduc
 - Cambios a la capa táctil (`frogger-canvas.tsx`, `jugar-client.tsx`, `touch-controls.tsx`).
 
 Cada uno de estos, si se necesita, va en su propia spec.
+
+---
+
+## Post implementación
+
+Resumen de lo aplicado en `lib/games/frogger/engine.ts` (commits `cc899d5`, `8b9ef01`, `52530e7`), pensado para reutilizarse en otros motores de `lib/games/<id>/engine.ts` que compartan el patrón `shadowBlur` + `ctx.save()`/`ctx.restore()` por entidad.
+
+### 1. Agrupar `save()`/`shadowBlur`/`restore()` por lote, no por entidad
+
+**Antes:** `drawEntity()` se llamaba una vez por entidad (auto, camión, tronco, tortuga) y cada llamada hacía su propio `ctx.save()` → `applySkinGlow()` (activa `shadowBlur`) → dibujo → `ctx.restore()`. Con 15-30 entidades por frame en niveles altos, eso son 15-30 activaciones/desactivaciones de `shadowBlur`, la operación más cara de Canvas2D.
+
+**Después:** `drawLaneEntities()` primero clasifica todas las entidades del frame por tipo (`cars`, `trucks`, `logs`, `turtles`) en un solo recorrido, y cada tipo se dibuja con una función de lote (`drawVehicleBatch`, `drawLogBatch`, `drawTurtleBatch`) que abre **un solo** `save()`/`shadowBlur`/`restore()` para todo el lote. Dentro del lote, todas las shapes del mismo color se acumulan en un único `ctx.beginPath()` y se pintan con un solo `fill()`/`stroke()` al final, en vez de un `fill()`/`stroke()` por shape.
+
+**Generalización — patrón a replicar en otro motor:**
+
+1. Identificar el bucle que dibuja N entidades por frame donde cada una llama a `ctx.save()`/`shadowBlur`/`ctx.restore()` individualmente.
+2. Agrupar las entidades por (tipo, color/skin) antes de dibujar — un `Map` o arrays paralelos, un solo recorrido.
+3. Por grupo: un `save()`, un `shadowBlur` (vía la función de glow existente), un `beginPath()` que acumula todas las shapes del grupo con `moveTo`/`arc`/`rect`/`lineTo` (no `beginPath()` por shape), un `fill()`/`stroke()` final, `shadowBlur = 0` antes de detalles sin glow (ruedas, vetas), y `restore()`.
+4. Cuidado con `ctx.arc()`/`ctx.ellipse()` encadenados sin `moveTo()` previo: crean una línea fantasma que conecta el final del arco anterior con el inicio del siguiente. Solución usada: un `moveTo()` al punto de inicio del arco/elipse antes de cada `arc()`/`ellipse()` dentro del path compartido.
+5. Verificación: comparación visual en todas las skins del juego, no solo medición de FPS — el riesgo real de este cambio es una regresión visual sutil (glow que se queda activo en la shape equivocada), no que dejes de ganar performance.
+
+Aplica igual a `drawGoals()`: N formas del mismo tipo (bordes de metas, rellenos de metas alcanzadas) se acumulan en un `ctx.rect()`/`ctx.ellipse()` por goal dentro de un único `beginPath()`, y se trazan/rellenan con un solo `stroke()`/`fill()`.
+
+**Cuándo NO aplica:** shapes que son la única instancia por frame (aquí, `drawFrog()`) no tienen lote que agrupar — no tocarlas.
+
+### 2. Cachear geometría estática redibujada cada frame en un canvas offscreen
+
+**Antes:** `drawScanlines()` (textura CRT de la skin `retro`) repetía ~190 `fillRect` de 1px de alto en **cada** frame, aunque el patrón nunca cambia entre frames — fue el causante del único pico duro medido (27.7ms en una llamada aislada).
+
+**Después:** el patrón se dibuja **una sola vez** en un `HTMLCanvasElement` creado en memoria (no adjunto al DOM, `document.createElement("canvas")`) y cacheado como propiedad del engine (`scanlinesBuffer`, con getter lazy `getScanlinesBuffer()`). Cada frame, `drawScanlines()` se reduce a un solo `ctx.drawImage(buffer, 0, 0)`.
+
+**Generalización — cuándo aplica:** cualquier elemento visual que (a) se redibuja cada frame con un bucle de muchas primitivas pequeñas (`fillRect`, `arc`, etc.) y (b) no depende de estado que cambie frame a frame (no de la posición del jugador, del nivel, del tiempo). Textura de fondo, patrones decorativos, grillas estáticas son candidatos típicos. Si el elemento cambia con la skin pero no frame a frame, cachear por skin (invalidar el buffer al cambiar de skin) en vez de cachear una sola vez para toda la vida del engine.
+
+**Por qué `HTMLCanvasElement` en memoria y no `OffscreenCanvas`:** mismo resultado, pero `HTMLCanvasElement` no depende de soporte de navegador — es el fallback universal (ver Riesgos de esta spec).
+
+### 3. Metodología de medición que sí funcionó en este entorno
+
+El umbral de aceptación original (FPS en DevTools Performance con throttling 4x) **no fue verificable en headless** — Chromium headless usa un renderer por software (SwiftShader) que no modela el costo de rasterización GPU de `shadowBlur`, y su `requestAnimationFrame` queda acotado por un vsync sintético (~120Hz) que oculta el jank real.
+
+**Lo que sí funcionó:** cronometrar `draw()` de forma aislada (llamarlo N veces seguidas tras precalentar el JIT, con CDP `Emulation.setCPUThrottlingRate` para simular CPU limitada) y comparar promedio/máximo antes/después por skin. Esto detectó el pico de 27.7ms de `retro` que el FPS meter headless no reflejaba, y cuantificó la mejora real (15-70% según skin) sin depender de un dispositivo físico.
+
+**Para otro motor:** si se sospecha jank y no hay dispositivo real disponible, medir `draw()` (o el método de render equivalente) aislado con este mismo protocolo antes de tocar código, en vez de confiar solo en el FPS meter de DevTools en headless. La verificación final del umbral en FPS real sigue necesitando un humano con Chrome real (no headless) — no se puede sustituir del todo, solo acotar el riesgo antes de mergear.
