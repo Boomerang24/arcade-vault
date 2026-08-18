@@ -95,6 +95,9 @@ const JUMP_MS = 120;
 const GOAL_SCORE = 50;
 const ROUND_SCORE = 200;
 const CELL_SCORE = 10;
+// Duración del destello rojo antes de restar la vida y reposicionar la rana.
+const DEATH_FLASH_MS = 450;
+const DEATH_COLOR = "#ef4444";
 // ---- skins ----
 export type SkinName = "classic" | "neon" | "retro";
 type Palette = {
@@ -302,6 +305,8 @@ export class FroggerEngine {
   private lives = 3;
   private roundTimer = ROUND_TIME_MS;
   private turtleCycleT = 0;
+  private dying = false;
+  private deathT = 0;
   private phase: "playing" | "gameover" = "playing";
   private gameOverNotified = false;
   private pendingDir: Direction | null = null;
@@ -332,6 +337,8 @@ export class FroggerEngine {
     this.lives = 3;
     this.roundTimer = roundTimeForLevel(this.level);
     this.turtleCycleT = 0;
+    this.dying = false;
+    this.deathT = 0;
     this.phase = "playing";
     this.gameOverNotified = false;
     this.pendingDir = null;
@@ -346,7 +353,13 @@ export class FroggerEngine {
     const dir = KEY_TO_DIRECTION[e.code];
     if (!dir) return;
     e.preventDefault();
-    if (this.paused || this.phase !== "playing" || this.frog.animating) return;
+    if (
+      this.paused ||
+      this.phase !== "playing" ||
+      this.frog.animating ||
+      this.dying
+    )
+      return;
     this.pendingDir = dir;
   };
   // ---- lógica de colisión y soporte ----
@@ -378,13 +391,18 @@ export class FroggerEngine {
   }
   private checkGoal() {
     const frog = this.frog;
+    // frog.col puede llegar con deriva fraccionaria si el salto partió desde
+    // un tronco/tortuga en movimiento; se redondea a la celda visual antes
+    // de comparar contra los rangos enteros de GOAL_COLS.
+    const col = Math.round(frog.col);
     const idx = GOAL_COLS.findIndex(
-      ([start, end]) => frog.col >= start && frog.col <= end,
+      ([start, end]) => col >= start && col <= end,
     );
     if (idx === -1 || this.goals[idx]) {
       this.killFrog();
       return;
     }
+    frog.col = col;
     this.goals[idx] = true;
     const bonus = Math.floor(this.roundTimer / 1000) * 10;
     this.score += GOAL_SCORE + bonus;
@@ -406,6 +424,13 @@ export class FroggerEngine {
     this.roundTimer = roundTimeForLevel(this.level);
   }
   private killFrog() {
+    if (this.dying) return;
+    this.dying = true;
+    this.deathT = 0;
+    this.frog.animating = false;
+  }
+  private finishDeath() {
+    this.dying = false;
     this.lives -= 1;
     if (this.lives <= 0) {
       this.lives = 0;
@@ -528,6 +553,11 @@ export class FroggerEngine {
   private update(dt: number) {
     if (this.phase !== "playing") return;
     this.updateEntities(dt);
+    if (this.dying) {
+      this.deathT += dt;
+      if (this.deathT >= DEATH_FLASH_MS) this.finishDeath();
+      return;
+    }
     this.updateFrog(dt);
     if (this.phase === "playing") this.updateRoundTimer(dt);
   }
@@ -539,13 +569,29 @@ export class FroggerEngine {
     if (row === ROW_SAFE_MID || row === ROW_START) return p.zoneSafe;
     return p.zoneRoad;
   }
+  // Buffer offscreen con las scanlines pre-renderizadas: se dibuja una
+  // sola vez y luego cada frame solo hace drawImage() del buffer, en vez
+  // de repetir ~190 fillRect por frame. No depende de la skin (siempre el
+  // mismo patrón), así que se cachea para toda la vida del engine.
+  private scanlinesBuffer: HTMLCanvasElement | null = null;
+  private getScanlinesBuffer(): HTMLCanvasElement {
+    if (this.scanlinesBuffer) return this.scanlinesBuffer;
+    const buffer = document.createElement("canvas");
+    buffer.width = W;
+    buffer.height = H;
+    const bctx = buffer.getContext("2d");
+    if (bctx) {
+      bctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+      for (let y = 0; y < H; y += 3) {
+        bctx.fillRect(0, y, W, 1);
+      }
+    }
+    this.scanlinesBuffer = buffer;
+    return buffer;
+  }
   // Textura CRT de la skin `retro`: scanlines horizontales sutiles.
   private drawScanlines() {
-    const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
-    for (let y = 0; y < H; y += 3) {
-      ctx.fillRect(0, y, W, 1);
-    }
+    this.ctx.drawImage(this.getScanlinesBuffer(), 0, 0);
   }
   private drawZones() {
     const ctx = this.ctx;
@@ -554,99 +600,169 @@ export class FroggerEngine {
       ctx.fillRect(0, row * CELL, W, CELL);
     }
   }
+  // Bordes de las 5 metas en un solo stroke(); rellenos de las metas
+  // alcanzadas en un solo fill() — antes cada meta tenía su propio
+  // shadowBlur + strokeRect/ellipse.
   private drawGoals() {
     const ctx = this.ctx;
     const p = this.palette;
+    const skin = this.currentSkin;
     const y = ROW_GOALS * CELL;
     ctx.save();
-    GOAL_COLS.forEach(([start, end], i) => {
+    applySkinGlow(ctx, skin, p.goalBorder, 10);
+    ctx.strokeStyle = p.goalBorder;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    GOAL_COLS.forEach(([start, end]) => {
       const x = start * CELL;
       const w = (end - start + 1) * CELL;
-      applySkinGlow(ctx, this.currentSkin, p.goalBorder, 10);
-      ctx.strokeStyle = p.goalBorder;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x + 2, y + 2, w - 4, CELL - 4);
-      if (this.goals[i]) {
-        applySkinGlow(ctx, this.currentSkin, p.goalFilled, 14);
-        ctx.fillStyle = p.goalFilled;
-        ctx.beginPath();
-        ctx.ellipse(
-          x + w / 2,
-          y + CELL / 2,
-          w / 3,
-          CELL / 3,
-          0,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
+      ctx.rect(x + 2, y + 2, w - 4, CELL - 4);
     });
+    ctx.stroke();
+    const filled = GOAL_COLS.filter((_, i) => this.goals[i]);
+    if (filled.length > 0) {
+      applySkinGlow(ctx, skin, p.goalFilled, 14);
+      ctx.fillStyle = p.goalFilled;
+      ctx.beginPath();
+      filled.forEach(([start, end]) => {
+        const x = start * CELL;
+        const w = (end - start + 1) * CELL;
+        const cx = x + w / 2;
+        const cy = y + CELL / 2;
+        const rx = w / 3;
+        const ry = CELL / 3;
+        ctx.moveTo(cx + rx, cy);
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      });
+      ctx.fill();
+    }
     ctx.restore();
   }
-  private drawEntity(entity: Entity, row: number) {
+  // Dibuja autos/camiones de un lote en un solo save/shadowBlur/restore en
+  // vez de uno por entidad: cuerpo -> cabina (solo camión) -> ruedas.
+  private drawVehicleBatch(
+    entries: { entity: Entity; row: number }[],
+    type: "car" | "truck",
+  ) {
+    if (entries.length === 0) return;
     const ctx = this.ctx;
     const p = this.palette;
-    const skin = this.currentSkin;
-    const x = entity.col * CELL;
-    const y = row * CELL;
-    const w = entity.width * CELL;
+    const body = type === "truck" ? p.truck : p.car;
     ctx.save();
-    if (entity.type === "car" || entity.type === "truck") {
-      const body = entity.type === "truck" ? p.truck : p.car;
-      applySkinGlow(ctx, skin, body, 12);
-      ctx.fillStyle = body;
+    applySkinGlow(ctx, this.currentSkin, body, 12);
+    ctx.fillStyle = body;
+    for (const { entity, row } of entries) {
+      const x = entity.col * CELL;
+      const y = row * CELL;
+      const w = entity.width * CELL;
       ctx.fillRect(x + 2, y + 6, w - 4, CELL - 12);
-      if (entity.type === "truck") {
-        ctx.fillStyle = p.truckCab;
+    }
+    if (type === "truck") {
+      ctx.fillStyle = p.truckCab;
+      for (const { entity, row } of entries) {
+        const x = entity.col * CELL;
+        const y = row * CELL;
+        const w = entity.width * CELL;
         ctx.fillRect(x + w - CELL + 4, y + 4, CELL - 8, CELL - 8);
       }
-      ctx.shadowBlur = 0;
-      ctx.fillStyle = p.wheel;
+    }
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = p.wheel;
+    ctx.beginPath();
+    for (const { entity, row } of entries) {
+      const x = entity.col * CELL;
+      const y = row * CELL;
+      const w = entity.width * CELL;
       const wheelY = y + CELL - 8;
-      ctx.beginPath();
+      ctx.moveTo(x + 12, wheelY);
       ctx.arc(x + 8, wheelY, 4, 0, Math.PI * 2);
+      ctx.moveTo(x + w - 4, wheelY);
       ctx.arc(x + w - 8, wheelY, 4, 0, Math.PI * 2);
-      ctx.fill();
-    } else if (entity.type === "log") {
-      applySkinGlow(ctx, skin, p.log, 10);
-      ctx.fillStyle = p.log;
+    }
+    ctx.fill();
+    ctx.restore();
+  }
+  // Dibuja troncos de un lote en un solo save/shadowBlur/restore; las
+  // líneas de veta de todos los troncos se agrupan en un solo stroke().
+  private drawLogBatch(entries: { entity: Entity; row: number }[]) {
+    if (entries.length === 0) return;
+    const ctx = this.ctx;
+    const p = this.palette;
+    ctx.save();
+    applySkinGlow(ctx, this.currentSkin, p.log, 10);
+    ctx.fillStyle = p.log;
+    for (const { entity, row } of entries) {
+      const x = entity.col * CELL;
+      const y = row * CELL;
+      const w = entity.width * CELL;
       ctx.fillRect(x + 2, y + 8, w - 4, CELL - 16);
-      ctx.shadowBlur = 0;
-      ctx.strokeStyle = p.logGrain;
-      ctx.lineWidth = 1;
+    }
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = p.logGrain;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (const { entity, row } of entries) {
+      const x = entity.col * CELL;
+      const y = row * CELL;
+      const w = entity.width * CELL;
       for (let lx = x + 6; lx < x + w - 4; lx += 10) {
-        ctx.beginPath();
         ctx.moveTo(lx, y + 8);
         ctx.lineTo(lx, y + CELL - 8);
-        ctx.stroke();
       }
-    } else {
-      // turtle
-      ctx.globalAlpha = entity.submerged ? 0.25 : 1;
-      applySkinGlow(ctx, skin, p.turtle, 12);
-      ctx.fillStyle = p.turtle;
-      for (let i = 0; i < entity.width; i++) {
-        ctx.beginPath();
-        ctx.arc(
-          x + i * CELL + CELL / 2,
-          y + CELL / 2,
-          CELL / 2 - 4,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
-      ctx.globalAlpha = 1;
     }
+    ctx.stroke();
+    ctx.restore();
+  }
+  // Dibuja tortugas de un lote en un solo save/shadowBlur/restore; se
+  // separan en dos fill() (visibles / sumergidas) por el globalAlpha.
+  private drawTurtleBatch(entries: { entity: Entity; row: number }[]) {
+    if (entries.length === 0) return;
+    const ctx = this.ctx;
+    const p = this.palette;
+    ctx.save();
+    applySkinGlow(ctx, this.currentSkin, p.turtle, 12);
+    ctx.fillStyle = p.turtle;
+    const fillGroup = (group: { entity: Entity; row: number }[]) => {
+      if (group.length === 0) return;
+      ctx.beginPath();
+      for (const { entity, row } of group) {
+        const x = entity.col * CELL;
+        const y = row * CELL;
+        for (let i = 0; i < entity.width; i++) {
+          const cx = x + i * CELL + CELL / 2;
+          const cy = y + CELL / 2;
+          const r = CELL / 2 - 4;
+          ctx.moveTo(cx + r, cy);
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+        }
+      }
+      ctx.fill();
+    };
+    ctx.globalAlpha = 1;
+    fillGroup(entries.filter(({ entity }) => !entity.submerged));
+    ctx.globalAlpha = 0.25;
+    fillGroup(entries.filter(({ entity }) => entity.submerged));
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
   private drawLaneEntities() {
+    const cars: { entity: Entity; row: number }[] = [];
+    const trucks: { entity: Entity; row: number }[] = [];
+    const logs: { entity: Entity; row: number }[] = [];
+    const turtles: { entity: Entity; row: number }[] = [];
     for (const lane of this.lanes) {
       for (const entity of lane.entities) {
-        this.drawEntity(entity, lane.row);
+        const item = { entity, row: lane.row };
+        if (entity.type === "car") cars.push(item);
+        else if (entity.type === "truck") trucks.push(item);
+        else if (entity.type === "log") logs.push(item);
+        else turtles.push(item);
       }
     }
+    this.drawVehicleBatch(cars, "car");
+    this.drawVehicleBatch(trucks, "truck");
+    this.drawLogBatch(logs);
+    this.drawTurtleBatch(turtles);
   }
   private drawFrog() {
     const ctx = this.ctx;
@@ -661,9 +777,32 @@ export class FroggerEngine {
     const cx = px * CELL + CELL / 2;
     const cy = py * CELL + CELL / 2;
     const p = this.palette;
+    const bodyColor = this.dying ? DEATH_COLOR : p.frog;
+    // Las patas se estiran durante el salto (pico a mitad del tramo) y se
+    // recogen al inicio/fin, simulando la propulsión de un salto real.
+    const legSpread = frog.animating
+      ? Math.sin(Math.min(1, frog.animT / JUMP_MS) * Math.PI)
+      : 0;
     ctx.save();
-    applySkinGlow(ctx, this.currentSkin, p.frog, 16);
-    ctx.fillStyle = p.frog;
+    applySkinGlow(ctx, this.currentSkin, bodyColor, 16);
+    if (legSpread > 0.01) {
+      const legReach = 10 + legSpread * 9;
+      const legOffsets: [number, number][] = [
+        [-1, -1],
+        [1, -1],
+        [-1, 1],
+        [1, 1],
+      ];
+      ctx.fillStyle = bodyColor;
+      legOffsets.forEach(([dx, dy]) => {
+        const lx = cx + dx * legReach;
+        const ly = cy + dy * legReach * 0.55;
+        ctx.beginPath();
+        ctx.ellipse(lx, ly, 4.5, 3, Math.atan2(dy, dx), 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+    ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.ellipse(cx, cy, 14, 12, 0, 0, Math.PI * 2);
     ctx.fill();
