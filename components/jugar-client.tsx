@@ -19,6 +19,7 @@ const TOUCH_DIRECTIONS: Record<
   tetris: { up: true, down: true, left: true, right: true },
   arkanoid: { up: false, down: false, left: true, right: true },
   snake: { up: true, down: true, left: true, right: true },
+  frogger: { up: true, down: true, left: true, right: true },
 };
 export function JugarClient({ game }: { game: Game }) {
   const router = useRouter();

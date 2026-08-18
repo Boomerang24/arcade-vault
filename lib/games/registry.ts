@@ -15,6 +15,10 @@ import {
   SnakeCanvas,
   type SnakeCanvasHandle,
 } from "@/components/games/snake-canvas";
+import {
+  FroggerCanvas,
+  type FroggerCanvasHandle,
+} from "@/components/games/frogger-canvas";
 export type EngineStats = {
   score: number;
   lives: number;
@@ -85,6 +89,14 @@ export const GAME_REGISTRY: Record<string, RegisteredGame> = {
       { id: "retro", label: "Retro" },
     ],
   },
+  frogger: {
+    Canvas: FroggerCanvas,
+    skins: [
+      { id: "classic", label: "Classic" },
+      { id: "neon", label: "Neon" },
+      { id: "retro", label: "Retro" },
+    ],
+  },
 };
 export function getRegisteredGame(id: string): RegisteredGame | undefined {
   return GAME_REGISTRY[id];
@@ -96,4 +108,5 @@ export type {
   TetrisCanvasHandle,
   ArkanoidCanvasHandle,
   SnakeCanvasHandle,
+  FroggerCanvasHandle,
 };
