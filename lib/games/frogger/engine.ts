@@ -77,6 +77,125 @@ const JUMP_MS = 120;
 const GOAL_SCORE = 50;
 const ROUND_SCORE = 200;
 const CELL_SCORE = 10;
+// ---- skins ----
+export type SkinName = "classic" | "neon" | "retro";
+type Palette = {
+  zoneGoals: string;
+  zoneRiver: string;
+  zoneSafe: string;
+  zoneRoad: string;
+  goalBorder: string;
+  goalFilled: string;
+  car: string;
+  truck: string;
+  truckCab: string;
+  wheel: string;
+  log: string;
+  logGrain: string;
+  turtle: string;
+  frog: string;
+  frogEye: string;
+  frogPupil: string;
+  hud: string;
+  timerHigh: string;
+  timerMid: string;
+  timerLow: string;
+  overlayBackdrop: string;
+  overlayTitle: string;
+  overlaySub: string;
+};
+const SKIN_PALETTES: Record<SkinName, Palette> = {
+  // `classic` reproduce exactamente los literales originales del motor.
+  classic: {
+    zoneGoals: "#123a12",
+    zoneRiver: "#001b33",
+    zoneSafe: "#0a2e0a",
+    zoneRoad: "#000000",
+    goalBorder: "#d4af00",
+    goalFilled: "#4ade80",
+    car: "#ef4444",
+    truck: "#6b7280",
+    truckCab: "#374151",
+    wheel: "#111827",
+    log: "#8b5a2b",
+    logGrain: "#5c3a1a",
+    turtle: "#16a34a",
+    frog: "#22c55e",
+    frogEye: "#ffffff",
+    frogPupil: "#000000",
+    hud: "#f0f0f0",
+    timerHigh: "#4ade80",
+    timerMid: "#facc15",
+    timerLow: "#ef4444",
+    overlayBackdrop: "rgba(0, 0, 0, 0.6)",
+    overlayTitle: "#f0f0f0",
+    overlaySub: "#f0f0f0",
+  },
+  neon: {
+    zoneGoals: "#12002b",
+    zoneRiver: "#00121f",
+    zoneSafe: "#0b0026",
+    zoneRoad: "#06000f",
+    goalBorder: "#f5ff00",
+    goalFilled: "#00ff88",
+    car: "#ff006e",
+    truck: "#c800ff",
+    truckCab: "#7a00b0",
+    wheel: "#06000f",
+    log: "#f5ff00",
+    logGrain: "#b0b800",
+    turtle: "#00f5ff",
+    frog: "#00ff88",
+    frogEye: "#f5ff00",
+    frogPupil: "#06000f",
+    hud: "#00f5ff",
+    timerHigh: "#00ff88",
+    timerMid: "#f5ff00",
+    timerLow: "#ff006e",
+    overlayBackdrop: "rgba(6, 0, 15, 0.68)",
+    overlayTitle: "#ff006e",
+    overlaySub: "#00f5ff",
+  },
+  retro: {
+    zoneGoals: "#3d2900",
+    zoneRiver: "#1f1400",
+    zoneSafe: "#2b1d00",
+    zoneRoad: "#0a0600",
+    goalBorder: "#ffb000",
+    goalFilled: "#ffb000",
+    car: "#ffb000",
+    truck: "#cc7a00",
+    truckCab: "#8a5200",
+    wheel: "#0a0600",
+    log: "#cc7a00",
+    logGrain: "#0a0600",
+    turtle: "#ffb000",
+    frog: "#ffb000",
+    frogEye: "#0a0600",
+    frogPupil: "#ffb000",
+    hud: "#ffb000",
+    timerHigh: "#ffb000",
+    timerMid: "#cc7a00",
+    timerLow: "#8a5200",
+    overlayBackdrop: "rgba(10, 6, 0, 0.68)",
+    overlayTitle: "#ffb000",
+    overlaySub: "#ffb000",
+  },
+};
+// Glow por skin: se aplica dentro de cada primitiva de dibujo.
+function applySkinGlow(
+  ctx: CanvasRenderingContext2D,
+  skin: SkinName,
+  color: string,
+  blur = 12,
+) {
+  if (skin === "neon") {
+    ctx.shadowColor = color;
+    ctx.shadowBlur = blur;
+  } else {
+    ctx.shadowBlur = 0;
+  }
+}
 const KEY_TO_DIRECTION: Record<string, Direction> = {
   ArrowUp: "up",
   ArrowDown: "down",
@@ -93,7 +212,7 @@ const DIRECTION_DELTA: Record<Direction, { x: number; y: number }> = {
 // huecos transitables de al menos 1 celda.
 function buildRoadLane(row: number, index: number, level: number): Lane {
   const dir: 1 | -1 = index % 2 === 0 ? -1 : 1;
-  const baseSpeed = 0.6 + (index % 3) * 0.35; // 0.6 - 1.3 celdas/frame base
+  const baseSpeed = 1.5 + (index % 3) * 1.25; // 1.5 - 4 px/frame base
   const speed = baseSpeed * (1 + (level - 1) * LEVEL_SPEED_STEP);
   const vehicleType: "car" | "truck" = index % 2 === 0 ? "car" : "truck";
   const width = vehicleType === "truck" ? 3 : 1 + (index % 2);
@@ -107,7 +226,7 @@ function buildRoadLane(row: number, index: number, level: number): Lane {
 // Genera un carril de río con troncos o tortugas, con huecos transitables.
 function buildRiverLane(row: number, index: number, level: number): Lane {
   const dir: 1 | -1 = index % 2 === 0 ? 1 : -1;
-  const baseSpeed = 0.4 + (index % 3) * 0.3; // 0.4 - 1.0 celdas/frame base
+  const baseSpeed = 1 + (index % 3) * 1; // 1 - 3 px/frame base
   const speed = baseSpeed * (1 + (level - 1) * LEVEL_SPEED_STEP);
   const isTurtleLane = index % 2 === 1;
   const entities: Entity[] = [];
@@ -166,6 +285,10 @@ export class FroggerEngine {
   private paused = false;
   private destroyed = false;
   private lastFrameTime = 0;
+  private currentSkin: SkinName = "classic";
+  private get palette(): Palette {
+    return SKIN_PALETTES[this.currentSkin];
+  }
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("No se pudo obtener el contexto 2D del canvas");
@@ -299,7 +422,7 @@ export class FroggerEngine {
     const cycle = TURTLE_VISIBLE_MS + TURTLE_SUBMERGED_MS;
     for (const lane of this.lanes) {
       lane.entities.forEach((entity, i) => {
-        entity.col += (lane.speed * lane.dir * dt) / 16;
+        entity.col += (lane.speed * lane.dir * dt) / 16 / CELL;
         if (lane.dir === 1 && entity.col > COLS) {
           entity.col = -entity.width;
         } else if (lane.dir === -1 && entity.col + entity.width < 0) {
@@ -354,7 +477,7 @@ export class FroggerEngine {
       }
       const lane = this.supportLane(support);
       if (lane) {
-        const drift = (lane.speed * lane.dir * dt) / 16;
+        const drift = (lane.speed * lane.dir * dt) / 16 / CELL;
         frog.col += drift;
         frog.targetCol = frog.col;
         if (frog.col < 0 || frog.col >= COLS) {
@@ -379,10 +502,19 @@ export class FroggerEngine {
   }
   // ---- render ----
   private zoneColor(row: number): string {
-    if (row === ROW_GOALS) return "#123a12";
-    if (RIVER_ROWS.includes(row)) return "#001b33";
-    if (row === ROW_SAFE_MID || row === ROW_START) return "#0a2e0a";
-    return "#000000";
+    const p = this.palette;
+    if (row === ROW_GOALS) return p.zoneGoals;
+    if (RIVER_ROWS.includes(row)) return p.zoneRiver;
+    if (row === ROW_SAFE_MID || row === ROW_START) return p.zoneSafe;
+    return p.zoneRoad;
+  }
+  // Textura CRT de la skin `retro`: scanlines horizontales sutiles.
+  private drawScanlines() {
+    const ctx = this.ctx;
+    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+    for (let y = 0; y < H; y += 3) {
+      ctx.fillRect(0, y, W, 1);
+    }
   }
   private drawZones() {
     const ctx = this.ctx;
@@ -393,15 +525,19 @@ export class FroggerEngine {
   }
   private drawGoals() {
     const ctx = this.ctx;
+    const p = this.palette;
     const y = ROW_GOALS * CELL;
+    ctx.save();
     GOAL_COLS.forEach(([start, end], i) => {
       const x = start * CELL;
       const w = (end - start + 1) * CELL;
-      ctx.strokeStyle = "#d4af00";
+      applySkinGlow(ctx, this.currentSkin, p.goalBorder, 10);
+      ctx.strokeStyle = p.goalBorder;
       ctx.lineWidth = 2;
       ctx.strokeRect(x + 2, y + 2, w - 4, CELL - 4);
       if (this.goals[i]) {
-        ctx.fillStyle = "#4ade80";
+        applySkinGlow(ctx, this.currentSkin, p.goalFilled, 14);
+        ctx.fillStyle = p.goalFilled;
         ctx.beginPath();
         ctx.ellipse(
           x + w / 2,
@@ -415,29 +551,38 @@ export class FroggerEngine {
         ctx.fill();
       }
     });
+    ctx.restore();
   }
   private drawEntity(entity: Entity, row: number) {
     const ctx = this.ctx;
+    const p = this.palette;
+    const skin = this.currentSkin;
     const x = entity.col * CELL;
     const y = row * CELL;
     const w = entity.width * CELL;
+    ctx.save();
     if (entity.type === "car" || entity.type === "truck") {
-      ctx.fillStyle = entity.type === "truck" ? "#6b7280" : "#ef4444";
+      const body = entity.type === "truck" ? p.truck : p.car;
+      applySkinGlow(ctx, skin, body, 12);
+      ctx.fillStyle = body;
       ctx.fillRect(x + 2, y + 6, w - 4, CELL - 12);
       if (entity.type === "truck") {
-        ctx.fillStyle = "#374151";
+        ctx.fillStyle = p.truckCab;
         ctx.fillRect(x + w - CELL + 4, y + 4, CELL - 8, CELL - 8);
       }
-      ctx.fillStyle = "#111827";
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = p.wheel;
       const wheelY = y + CELL - 8;
       ctx.beginPath();
       ctx.arc(x + 8, wheelY, 4, 0, Math.PI * 2);
       ctx.arc(x + w - 8, wheelY, 4, 0, Math.PI * 2);
       ctx.fill();
     } else if (entity.type === "log") {
-      ctx.fillStyle = "#8b5a2b";
+      applySkinGlow(ctx, skin, p.log, 10);
+      ctx.fillStyle = p.log;
       ctx.fillRect(x + 2, y + 8, w - 4, CELL - 16);
-      ctx.strokeStyle = "#5c3a1a";
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = p.logGrain;
       ctx.lineWidth = 1;
       for (let lx = x + 6; lx < x + w - 4; lx += 10) {
         ctx.beginPath();
@@ -448,7 +593,8 @@ export class FroggerEngine {
     } else {
       // turtle
       ctx.globalAlpha = entity.submerged ? 0.25 : 1;
-      ctx.fillStyle = "#16a34a";
+      applySkinGlow(ctx, skin, p.turtle, 12);
+      ctx.fillStyle = p.turtle;
       for (let i = 0; i < entity.width; i++) {
         ctx.beginPath();
         ctx.arc(
@@ -462,6 +608,7 @@ export class FroggerEngine {
       }
       ctx.globalAlpha = 1;
     }
+    ctx.restore();
   }
   private drawLaneEntities() {
     for (const lane of this.lanes) {
@@ -482,25 +629,32 @@ export class FroggerEngine {
     }
     const cx = px * CELL + CELL / 2;
     const cy = py * CELL + CELL / 2;
-    ctx.fillStyle = "#22c55e";
+    const p = this.palette;
+    ctx.save();
+    applySkinGlow(ctx, this.currentSkin, p.frog, 16);
+    ctx.fillStyle = p.frog;
     ctx.beginPath();
     ctx.ellipse(cx, cy, 14, 12, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#ffffff";
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = p.frogEye;
     ctx.beginPath();
     ctx.arc(cx - 6, cy - 8, 3, 0, Math.PI * 2);
     ctx.arc(cx + 6, cy - 8, 3, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = "#000000";
+    ctx.fillStyle = p.frogPupil;
     ctx.beginPath();
     ctx.arc(cx - 6, cy - 8, 1.4, 0, Math.PI * 2);
     ctx.arc(cx + 6, cy - 8, 1.4, 0, Math.PI * 2);
     ctx.fill();
+    ctx.restore();
   }
   private drawHUD() {
     const ctx = this.ctx;
+    const p = this.palette;
     ctx.save();
-    ctx.fillStyle = "#f0f0f0";
+    applySkinGlow(ctx, this.currentSkin, p.hud, 8);
+    ctx.fillStyle = p.hud;
     ctx.font = '15px "Courier New", monospace';
     ctx.textAlign = "left";
     ctx.fillText(`SCORE  ${this.score}`, 14, 26);
@@ -510,26 +664,38 @@ export class FroggerEngine {
     ctx.fillText("♥".repeat(Math.max(0, this.lives)), W - 14, 26);
     ctx.restore();
     const ratio = Math.max(0, this.roundTimer / roundTimeForLevel(this.level));
-    ctx.fillStyle =
-      ratio > 0.5 ? "#4ade80" : ratio > 0.2 ? "#facc15" : "#ef4444";
+    const timerColor =
+      ratio > 0.5 ? p.timerHigh : ratio > 0.2 ? p.timerMid : p.timerLow;
+    ctx.save();
+    applySkinGlow(ctx, this.currentSkin, timerColor, 10);
+    ctx.fillStyle = timerColor;
     ctx.fillRect(0, 0, W * ratio, 5);
+    ctx.restore();
   }
   private drawOverlay(title: string, sub: string) {
     const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    const p = this.palette;
+    ctx.save();
+    ctx.fillStyle = p.overlayBackdrop;
     ctx.fillRect(0, 0, W, H);
     ctx.textAlign = "center";
-    ctx.fillStyle = "#f0f0f0";
+    applySkinGlow(ctx, this.currentSkin, p.overlayTitle, 18);
+    ctx.fillStyle = p.overlayTitle;
     ctx.font = 'bold 40px "Courier New", monospace';
     ctx.fillText(title, W / 2, H / 2 - 16);
+    applySkinGlow(ctx, this.currentSkin, p.overlaySub, 10);
+    ctx.fillStyle = p.overlaySub;
     ctx.font = '18px "Courier New", monospace';
     ctx.fillText(sub, W / 2, H / 2 + 24);
+    ctx.restore();
   }
   private draw() {
     this.drawZones();
     this.drawGoals();
     this.drawLaneEntities();
     this.drawFrog();
+    // Las scanlines van sobre el campo pero debajo del HUD/overlay.
+    if (this.currentSkin === "retro") this.drawScanlines();
     this.drawHUD();
     if (this.phase === "gameover") {
       this.drawOverlay("GAME OVER", `Score final: ${this.score}`);
@@ -586,6 +752,11 @@ export class FroggerEngine {
       level: this.level,
       state: "gameover",
     });
+  }
+  // Redibuja sincrónicamente para que el cambio se vea también en pausa.
+  setSkin(skin: SkinName): void {
+    this.currentSkin = skin;
+    this.draw();
   }
   destroy(): void {
     this.destroyed = true;

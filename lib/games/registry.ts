@@ -91,6 +91,11 @@ export const GAME_REGISTRY: Record<string, RegisteredGame> = {
   },
   frogger: {
     Canvas: FroggerCanvas,
+    skins: [
+      { id: "classic", label: "Classic" },
+      { id: "neon", label: "Neon" },
+      { id: "retro", label: "Retro" },
+    ],
   },
 };
 export function getRegisteredGame(id: string): RegisteredGame | undefined {

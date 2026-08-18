@@ -12,6 +12,45 @@ El agente trabaja **un juego por corrida** — nunca recorre el catálogo comple
 | asteroides | ✅      | ✅   | ✅    | —                | 2026-08-15  |
 | arkanoid   | ✅      | ✅   | ✅    | —                | 2026-08-15  |
 | snake      | ✅      | ✅   | ✅    | —                | 2026-08-15  |
+| frogger    | ✅      | ✅   | ✅    | —                | 2026-08-17  |
+
+## frogger
+
+**Técnica:** paleta por rol semántico (`SKIN_PALETTES: Record<SkinName, Palette>`) en `lib/games/frogger/engine.ts`. Juego 100% procedural (no hay spritesheet ni `public/games/frogger/`), así que cada literal de color pasó a ser un campo de la paleta. El motor expone `private currentSkin` + getter `palette`; `zoneColor(row)`, `drawGoals`, `drawEntity`, `drawFrog`, `drawHUD` (incluida la barra de tiempo) y `drawOverlay` leen de ahí. El glow se centraliza en el helper `applySkinGlow(ctx, skin, color, blur)` (solo activo en `neon`); cada primitiva envuelve su dibujo en `save()/restore()` para no filtrar `shadowBlur`/`globalAlpha` entre entidades. `setSkin()` redibuja sincrónicamente (verificado en pausa). Selector compartido vía `GAME_REGISTRY.frogger.skins`.
+
+| Rol              | classic           | neon                | retro               |
+| ---------------- | ----------------- | ------------------- | ------------------- |
+| zoneGoals        | `#123a12`         | `#12002b`           | `#3d2900`           |
+| zoneRiver        | `#001b33`         | `#00121f`           | `#1f1400`           |
+| zoneSafe         | `#0a2e0a`         | `#0b0026`           | `#2b1d00`           |
+| zoneRoad         | `#000000`         | `#06000f`           | `#0a0600`           |
+| goalBorder       | `#d4af00`         | `#f5ff00`           | `#ffb000`           |
+| goalFilled       | `#4ade80`         | `#00ff88`           | `#ffb000`           |
+| car              | `#ef4444`         | `#ff006e`           | `#ffb000`           |
+| truck            | `#6b7280`         | `#c800ff`           | `#cc7a00`           |
+| truckCab         | `#374151`         | `#7a00b0`           | `#8a5200`           |
+| wheel            | `#111827`         | `#06000f`           | `#0a0600`           |
+| log              | `#8b5a2b`         | `#f5ff00`           | `#cc7a00`           |
+| logGrain         | `#5c3a1a`         | `#b0b800`           | `#0a0600`           |
+| turtle           | `#16a34a`         | `#00f5ff`           | `#ffb000`           |
+| frog             | `#22c55e`         | `#00ff88`           | `#ffb000`           |
+| frogEye          | `#ffffff`         | `#f5ff00`           | `#0a0600`           |
+| frogPupil        | `#000000`         | `#06000f`           | `#ffb000`           |
+| hud              | `#f0f0f0`         | `#00f5ff`           | `#ffb000`           |
+| timerHigh        | `#4ade80`         | `#00ff88`           | `#ffb000`           |
+| timerMid         | `#facc15`         | `#f5ff00`           | `#cc7a00`           |
+| timerLow         | `#ef4444`         | `#ff006e`           | `#8a5200`           |
+| overlay backdrop | `rgba(0,0,0,0.6)` | `rgba(6,0,15,0.68)` | `rgba(10,6,0,0.68)` |
+| overlay title    | `#f0f0f0`         | `#ff006e`           | `#ffb000`           |
+| overlay sub      | `#f0f0f0`         | `#00f5ff`           | `#ffb000`           |
+
+**Estilo por skin:**
+
+- `classic`: literales originales exactos (río `#001b33`, troncos `#8b5a2b` con vetas `#5c3a1a`, tortugas `#16a34a`, rana `#22c55e` con ojos blancos, coches rojos y camiones grises, HUD `#f0f0f0`, barra de tiempo verde/amarillo/rojo). Sin glow ni scanlines.
+- `neon`: `shadowBlur` en bocas de meta (10/14), vehículos (12), troncos (10), tortugas (12), rana (16), HUD (8), barra de tiempo (10) y overlay (18/10). Ruedas y cabina sin glow para que la silueta no se aplane. Colores alineados con los tokens del sitio (`--cyan`, `--magenta`, `--yellow`, `--green`).
+- `retro`: monocromo ámbar CRT (`#ffb000`) sobre negro cálido, sin glow, con las zonas diferenciadas por luminancia ámbar (meta `#3d2900` > seguro `#2b1d00` > río `#1f1400` > carretera `#0a0600`) y scanlines horizontales (`rgba(0,0,0,0.22)` cada 3px) dibujadas sobre el campo pero **debajo** del HUD y del overlay de game over.
+
+**Notas:** en `retro` la distinción tronco/tortuga (crítica para la mecánica del río) no puede ser por tono, así que se separa por forma —el tronco ya era rectángulo con vetas y la tortuga círculo— y por dos escalones de ámbar (`#cc7a00` vs `#ffb000`); lo mismo con coche (`#ffb000`) vs camión (`#cc7a00` + cabina `#8a5200`). El fade de tortuga sumergida se mantiene idéntico (`globalAlpha 0.25`) en las 3 skins, porque es señal de mecánica, no de estilo. Ojo de la rana en `retro` invertido (ojo oscuro sobre cuerpo ámbar) para que siga leyéndose. Cero cambios de mecánica: velocidades de carril, `CELL`, colisiones por celda, deriva sobre soporte, temporizador de ronda y puntuación quedaron intactos — el glow de `neon` no altera hitboxes (las colisiones son por columna/fila, no por píxel dibujado). No se añadió ningún asset a `public/games/`.
 
 ## arkanoid
 
