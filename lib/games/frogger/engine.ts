@@ -95,6 +95,9 @@ const JUMP_MS = 120;
 const GOAL_SCORE = 50;
 const ROUND_SCORE = 200;
 const CELL_SCORE = 10;
+// Duración del destello rojo antes de restar la vida y reposicionar la rana.
+const DEATH_FLASH_MS = 450;
+const DEATH_COLOR = "#ef4444";
 // ---- skins ----
 export type SkinName = "classic" | "neon" | "retro";
 type Palette = {
@@ -302,6 +305,8 @@ export class FroggerEngine {
   private lives = 3;
   private roundTimer = ROUND_TIME_MS;
   private turtleCycleT = 0;
+  private dying = false;
+  private deathT = 0;
   private phase: "playing" | "gameover" = "playing";
   private gameOverNotified = false;
   private pendingDir: Direction | null = null;
@@ -332,6 +337,8 @@ export class FroggerEngine {
     this.lives = 3;
     this.roundTimer = roundTimeForLevel(this.level);
     this.turtleCycleT = 0;
+    this.dying = false;
+    this.deathT = 0;
     this.phase = "playing";
     this.gameOverNotified = false;
     this.pendingDir = null;
@@ -346,7 +353,13 @@ export class FroggerEngine {
     const dir = KEY_TO_DIRECTION[e.code];
     if (!dir) return;
     e.preventDefault();
-    if (this.paused || this.phase !== "playing" || this.frog.animating) return;
+    if (
+      this.paused ||
+      this.phase !== "playing" ||
+      this.frog.animating ||
+      this.dying
+    )
+      return;
     this.pendingDir = dir;
   };
   // ---- lógica de colisión y soporte ----
@@ -378,13 +391,18 @@ export class FroggerEngine {
   }
   private checkGoal() {
     const frog = this.frog;
+    // frog.col puede llegar con deriva fraccionaria si el salto partió desde
+    // un tronco/tortuga en movimiento; se redondea a la celda visual antes
+    // de comparar contra los rangos enteros de GOAL_COLS.
+    const col = Math.round(frog.col);
     const idx = GOAL_COLS.findIndex(
-      ([start, end]) => frog.col >= start && frog.col <= end,
+      ([start, end]) => col >= start && col <= end,
     );
     if (idx === -1 || this.goals[idx]) {
       this.killFrog();
       return;
     }
+    frog.col = col;
     this.goals[idx] = true;
     const bonus = Math.floor(this.roundTimer / 1000) * 10;
     this.score += GOAL_SCORE + bonus;
@@ -406,6 +424,13 @@ export class FroggerEngine {
     this.roundTimer = roundTimeForLevel(this.level);
   }
   private killFrog() {
+    if (this.dying) return;
+    this.dying = true;
+    this.deathT = 0;
+    this.frog.animating = false;
+  }
+  private finishDeath() {
+    this.dying = false;
     this.lives -= 1;
     if (this.lives <= 0) {
       this.lives = 0;
@@ -528,6 +553,11 @@ export class FroggerEngine {
   private update(dt: number) {
     if (this.phase !== "playing") return;
     this.updateEntities(dt);
+    if (this.dying) {
+      this.deathT += dt;
+      if (this.deathT >= DEATH_FLASH_MS) this.finishDeath();
+      return;
+    }
     this.updateFrog(dt);
     if (this.phase === "playing") this.updateRoundTimer(dt);
   }
@@ -747,9 +777,32 @@ export class FroggerEngine {
     const cx = px * CELL + CELL / 2;
     const cy = py * CELL + CELL / 2;
     const p = this.palette;
+    const bodyColor = this.dying ? DEATH_COLOR : p.frog;
+    // Las patas se estiran durante el salto (pico a mitad del tramo) y se
+    // recogen al inicio/fin, simulando la propulsión de un salto real.
+    const legSpread = frog.animating
+      ? Math.sin(Math.min(1, frog.animT / JUMP_MS) * Math.PI)
+      : 0;
     ctx.save();
-    applySkinGlow(ctx, this.currentSkin, p.frog, 16);
-    ctx.fillStyle = p.frog;
+    applySkinGlow(ctx, this.currentSkin, bodyColor, 16);
+    if (legSpread > 0.01) {
+      const legReach = 10 + legSpread * 9;
+      const legOffsets: [number, number][] = [
+        [-1, -1],
+        [1, -1],
+        [-1, 1],
+        [1, 1],
+      ];
+      ctx.fillStyle = bodyColor;
+      legOffsets.forEach(([dx, dy]) => {
+        const lx = cx + dx * legReach;
+        const ly = cy + dy * legReach * 0.55;
+        ctx.beginPath();
+        ctx.ellipse(lx, ly, 4.5, 3, Math.atan2(dy, dx), 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+    ctx.fillStyle = bodyColor;
     ctx.beginPath();
     ctx.ellipse(cx, cy, 14, 12, 0, 0, Math.PI * 2);
     ctx.fill();
