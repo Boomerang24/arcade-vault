@@ -554,34 +554,42 @@ export class FroggerEngine {
       ctx.fillRect(0, row * CELL, W, CELL);
     }
   }
+  // Bordes de las 5 metas en un solo stroke(); rellenos de las metas
+  // alcanzadas en un solo fill() — antes cada meta tenía su propio
+  // shadowBlur + strokeRect/ellipse.
   private drawGoals() {
     const ctx = this.ctx;
     const p = this.palette;
+    const skin = this.currentSkin;
     const y = ROW_GOALS * CELL;
     ctx.save();
-    GOAL_COLS.forEach(([start, end], i) => {
+    applySkinGlow(ctx, skin, p.goalBorder, 10);
+    ctx.strokeStyle = p.goalBorder;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    GOAL_COLS.forEach(([start, end]) => {
       const x = start * CELL;
       const w = (end - start + 1) * CELL;
-      applySkinGlow(ctx, this.currentSkin, p.goalBorder, 10);
-      ctx.strokeStyle = p.goalBorder;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x + 2, y + 2, w - 4, CELL - 4);
-      if (this.goals[i]) {
-        applySkinGlow(ctx, this.currentSkin, p.goalFilled, 14);
-        ctx.fillStyle = p.goalFilled;
-        ctx.beginPath();
-        ctx.ellipse(
-          x + w / 2,
-          y + CELL / 2,
-          w / 3,
-          CELL / 3,
-          0,
-          0,
-          Math.PI * 2,
-        );
-        ctx.fill();
-      }
+      ctx.rect(x + 2, y + 2, w - 4, CELL - 4);
     });
+    ctx.stroke();
+    const filled = GOAL_COLS.filter((_, i) => this.goals[i]);
+    if (filled.length > 0) {
+      applySkinGlow(ctx, skin, p.goalFilled, 14);
+      ctx.fillStyle = p.goalFilled;
+      ctx.beginPath();
+      filled.forEach(([start, end]) => {
+        const x = start * CELL;
+        const w = (end - start + 1) * CELL;
+        const cx = x + w / 2;
+        const cy = y + CELL / 2;
+        const rx = w / 3;
+        const ry = CELL / 3;
+        ctx.moveTo(cx + rx, cy);
+        ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+      });
+      ctx.fill();
+    }
     ctx.restore();
   }
   // Dibuja autos/camiones de un lote en un solo save/shadowBlur/restore en
