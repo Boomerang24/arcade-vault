@@ -1,8 +1,8 @@
 # SPEC — Frogger: integración core del juego
 
-> **Estado:** Approved
+> **Estado:** Implemented
 > **Depende de:** 06-games-table-leaderboard-supabase
-> **Fecha:** 2026-05-20 (revisado 2026-08-17 para alinear con el contrato de motor/registry/`jugar-client.tsx` vigente)
+> **Fecha:** 2026-05-20 (revisado 2026-08-17 para alinear con el contrato de motor/registry/`jugar-client.tsx` vigente; actualizado 2026-08-17 tras `@skin-designer`, `@mobile-porter` y ajustes de dificultad)
 > **Objetivo:** Integrar Frogger (canvas puro, construido desde cero) como juego jugable en Arcade Vault con ID `frogger`, siguiendo el contrato de motor plano (`lib/games/frogger/engine.ts` + `components/games/frogger-canvas.tsx` + una línea en `GAME_REGISTRY`) que ya usan `asteroides`/`tetris`/`arkanoid`/`snake`, reutilizando la ruta compartida `/juego/[id]/jugar`.
 
 ---
@@ -17,6 +17,16 @@ La versión original de esta spec (escrita por `@game-jam` antes de que specs 06
 - Ya existe una clase CSS `.cover-rana` (temática rana, cian/verde) en `app/globals.css` — se reutiliza en vez de crear `.cover-frogger`.
 
 Toda la **mecánica de juego** (cuadrícula, carriles, colisiones, salto, rondas, puntuación, vidas, temporizador) de la versión original se conserva sin cambios; lo que cambia es exclusivamente cómo se conecta con la plataforma.
+
+---
+
+## Nota de revisión (2026-08-17, post-implementación)
+
+Tras el `Approved`/implementación inicial, dos subagentes dedicados y una serie de ajustes de tuning se aplicaron sobre este mismo motor, fuera del flujo `/spec-impl` (según el patrón del proyecto para paint-layers y wiring acotado):
+
+- **`@skin-designer`** refactorizó todos los literales de color de `lib/games/frogger/engine.ts` a una tabla `SKIN_PALETTES: Record<SkinName, Palette>` (`classic`/`neon`/`retro`), con un getter `palette` y el helper `applySkinGlow()` para el efecto de brillo de `neon`. `setSkin()` redibuja sincrónicamente incluso en pausa. Registrado en `GAME_REGISTRY.frogger.skins` y documentado en `references/game-with-themes.md`. Esto **reemplaza** la sección "Fuera de alcance: Skins `neon`/`retro`" de más abajo — ya no aplica.
+- **`@mobile-porter`** añadió soporte táctil: fila `frogger: { up: true, down: true, left: true, right: true }` en `TOUCH_DIRECTIONS` (`components/jugar-client.tsx`), sin `touchActions` en el registro (el motor solo escucha `ArrowUp/Down/Left/Right`, no hay botón de acción). No tocó `frogger-canvas.tsx` ni el HUD del motor (ya tenía HUD propio con iconos de corazón). Documentado en `references/mobile-ported-games.md`. Esto **reemplaza** la sección "Fuera de alcance: Controles táctiles" de más abajo.
+- **Tuning de dificultad progresiva** (fix directo, sin spec): se añadieron `levelGapBonus(level)` (huecos extra entre entidades en niveles bajos, decreciente hasta 0) y `levelSpeedRampMult(level)` (rampa de velocidad del 55 % al 100 % en los primeros 4 niveles), aplicados tanto a carriles de carretera como de río. Adicionalmente se amplió el hueco base entre coches/camiones de 4 a 6 celdas (`gap = 6 + levelGapBonus(level)` en `buildRoadLane`) para dar más separación visual y de reacción entre vehículos consecutivos.
 
 ---
 
@@ -48,8 +58,8 @@ Toda la **mecánica de juego** (cuadrícula, carriles, colisiones, salto, rondas
 **Fuera de alcance:**
 
 - Sprites bitmap externos — todos los elementos se dibujan con primitivas canvas (rectángulos, arcos, formas compuestas) con colores temáticos; no se carga ninguna imagen.
-- Controles táctiles o mobile (los cablea `@mobile-porter` en una pasada posterior, un juego por corrida, siguiendo la spec 12).
-- Skins `neon`/`retro` (las añade `@skin-designer` en una pasada posterior).
+- Controles táctiles o mobile en este spec — cableados después por `@mobile-porter` (ver nota de revisión post-implementación arriba; ya implementado).
+- Skins `neon`/`retro` en este spec — añadidas después por `@skin-designer` (ver nota de revisión post-implementación arriba; ya implementado).
 - Animaciones de muerte elaboradas (explosiones, partículas) — se cubre en spec secundario.
 - Power-ups especiales (mosca en la boca destino, cocodrilo disfrazado de tronco) — se cubre en spec secundario.
 - Supabase Auth y RLS — el guardado de score reutiliza `saveScore` de `auth-provider.tsx` tal cual está, sin cambios.
