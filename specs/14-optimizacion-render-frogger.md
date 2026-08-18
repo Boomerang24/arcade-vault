@@ -1,0 +1,110 @@
+# 14 — Optimización de render en Frogger
+
+**Estado:** Approved
+**Depende de:** SPEC 12, SPEC 13
+**Fecha:** 2026-08-17
+
+**Objetivo:** Reducir el costo de render por frame de `lib/games/frogger/engine.ts` (menos `ctx.save()`/`ctx.restore()` y `shadowBlur` por entidad, scanlines de la skin `retro` pre-renderizadas en un canvas offscreen en vez de redibujarse pixel a pixel cada frame) hasta sostener ≥55 FPS con CPU throttling 4x en nivel 5+ con skin `neon`.
+
+---
+
+## Por qué esta spec existe
+
+El síntoma reportado es jank creciente con el nivel/tiempo de juego. `buildRoadLane`/`buildRiverLane` reducen el hueco entre entidades (`levelGapBonus`) y suben la velocidad (`LEVEL_SPEED_STEP`, `levelSpeedRampMult`) a medida que sube `level` — así que en niveles altos hay más entidades simultáneas en pantalla. Cada entidad se dibuja con `ctx.save()` + `applySkinGlow()` (que activa `ctx.shadowBlur` en skin `neon`) + `ctx.restore()` en `drawEntity()`, y lo mismo ocurre en `drawGoals()` (5 veces por frame) y `drawFrog()`. `shadowBlur` es una de las operaciones más caras de Canvas2D porque fuerza un blur por software en cada shape que la tiene activa; multiplicada por 15-30 entidades por frame en niveles altos, es la sospecha principal del jank. La skin `retro` suma `drawScanlines()`, que hace ~90 llamadas a `fillRect` de 1px de alto por frame, siempre, en vez de una sola vez.
+
+No se toca ningún otro motor (`arkanoid`, `asteroides`, `snake`, `tetris`) en esta spec — usan `shadowBlur`/`ctx.save()` con menor densidad de entidades simultáneas y no hay síntoma reportado en ellos.
+
+---
+
+## Alcance
+
+**Incluye:**
+
+- Medir el baseline de performance de `frogger` antes de tocar código: DevTools Performance, CPU throttling 4x, nivel 5+ (jugado manualmente hasta llegar o forzado subiendo `this.level` para la medición), skin `neon`, 30s de juego continuo. Registrar FPS promedio y frames largos (>16.6ms).
+- Reducir `ctx.save()`/`ctx.restore()` en el hot path de dibujo (`drawEntity`, `drawGoals`, `drawFrog`) agrupando el estado de canvas que puede compartirse entre shapes del mismo tipo en vez de aislarlo por shape individual.
+- Evitar togglear `shadowBlur` shape por shape cuando varias shapes consecutivas comparten skin/color: agrupar el `shadowBlur` una vez por lote de shapes en vez de una vez por shape.
+- Pre-renderizar las scanlines de la skin `retro` (`drawScanlines`) a un `OffscreenCanvas` (o `HTMLCanvasElement` no adjunto al DOM) una sola vez al activar esa skin, y en cada frame solo hacer un `drawImage` de ese buffer sobre el canvas principal.
+- Volver a medir con el mismo protocolo (nivel 5+, skin `neon`, throttling 4x, 30s) y confirmar el umbral de aceptación.
+- Repetir la medición final también en skin `retro` (con las scanlines cacheadas) para confirmar que no regresó el jank ahí.
+
+**Fuera de alcance (para futuras specs):**
+
+- Cualquier cambio a `arkanoid`, `asteroides`, `snake` o `tetris`, aunque compartan el patrón `shadowBlur`/`ctx.save()`. Si tras esta spec se confirma el mismo síntoma en otro juego, se abre spec propia para ese motor.
+- Cambios de mecánica, dificultad, `EngineStats` o balance de niveles (`LEVEL_SPEED_STEP`, `levelGapBonus`, etc.). Esta spec es puramente de render, no de gameplay.
+- Migrar el render a WebGL o a una librería de canvas (Pixi, Konva, etc.). Se mantiene Canvas2D puro, como el resto del catálogo.
+- Object pooling de `Entity` o cambios a `updateEntities`/`updateFrog` (lógica de update, no de dibujo) salvo que el profiling del paso 1 muestre que el costo real está ahí y no en el render — en ese caso se documenta como decisión revisada, no se asume de entrada.
+- Tocar `components/games/frogger-canvas.tsx` o el cableado táctil de la spec 12/13.
+
+---
+
+## Modelo de datos
+
+Esta spec no introduce estructuras de datos nuevas. Reutiliza `Entity`, `Lane`, `Frog`, `Palette` ya definidos en `lib/games/frogger/engine.ts`. El único elemento nuevo es un buffer de render interno (canvas offscreen para las scanlines de `retro`), que es estado de implementación del engine, no un tipo de dominio.
+
+---
+
+## Plan de implementación
+
+1. Medir el baseline: capturar un perfil de DevTools Performance en `frogger` (nivel 5+, skin `neon`, CPU throttling 4x, 30s), anotar FPS promedio y % de frames >16.6ms en la spec o en un comentario de PR. No se cambia código en este paso.
+
+   **Baseline medido (2026-08-18, Playwright/Chromium headless, CDP `Emulation.setCPUThrottlingRate: 4`, nivel 5, 39 entidades en pantalla):** en vez de medir el intervalo entre `requestAnimationFrame` (que en headless resultó estar acotado por vsync sintético a ~120 Hz y no reflejaba coste real), se cronometró `draw()` de forma aislada llamándolo 300 veces por skin tras precalentar el JIT.
+
+   | Skin    | `draw()` promedio | `draw()` máximo | % de llamadas >16.6ms |
+   | ------- | ----------------- | --------------- | --------------------- |
+   | classic | 0.11 ms           | 1.10 ms         | 0%                    |
+   | neon    | 0.16 ms           | 2.20 ms         | 0%                    |
+   | retro   | 0.27 ms           | 27.70 ms        | 0.33% (1 de 300)      |
+
+   `update()` (lógica, sin dibujo) promedió 0.012 ms — confirma que el costo, si existe, está en el render y no en la lógica de actualización, como asumían las Decisiones de esta spec.
+
+   **Limitación del entorno de medición:** el throttling de CDP ralentiza el hilo principal de JS pero no modela con fidelidad el costo de rasterización GPU de `shadowBlur` en hardware real (headless Chromium usa un renderer por software, SwiftShader) — por eso los promedios aislados no muestran el jank reportado en dispositivos reales. El único indicio consistente con la hipótesis de esta spec es el pico aislado de 27.7 ms en skin `retro` (`drawScanlines()` sin cachear), que coincide con el mecanismo descrito en "Por qué esta spec existe". El plan de optimización (pasos 2-4) se mantiene sin cambios: está basado en análisis de código (conteo de `shadowBlur`/`ctx.save()` por frame), no solo en este perfil aislado, y el pico de `retro` sí lo confirma parcialmente.
+
+2. En `drawEntity()`, agrupar las llamadas a `applySkinGlow`/`ctx.save()`/`ctx.restore()` por tipo de entidad dentro de `drawLaneEntities()` en vez de por entidad individual, de forma que shapes del mismo tipo y skin compartan un solo `save`/`shadowBlur`/`restore`. Verificación manual: el render visual de autos, camiones, troncos y tortugas se ve idéntico en las 3 skins.
+3. Aplicar el mismo agrupamiento en `drawGoals()` (5 metas) y evaluar si `drawFrog()` necesita su propio `save`/`restore` aislado (probablemente sí, por ser una sola shape con múltiples colores). Verificación manual: metas y rana se ven idénticas.
+4. Implementar el cacheo de `drawScanlines()`: crear el buffer offscreen una vez al construir el engine o al cambiar a skin `retro`, dibujar las líneas ahí una sola vez, y sustituir el cuerpo de `drawScanlines()` por un `ctx.drawImage()` del buffer. Verificación manual: skin `retro` se ve visualmente igual (scanlines presentes).
+5. Repetir la medición del paso 1 con el mismo protocolo y comparar contra el baseline. Si no se alcanza ≥55 FPS, iterar sobre los pasos 2-4 antes de cerrar la spec (no se agregan técnicas nuevas fuera de las ya descritas sin actualizar esta spec primero).
+6. Medir también skin `retro` con el mismo protocolo (nivel 5+, throttling 4x, 30s) para confirmar que el cacheo de scanlines no dejó una regresión ahí.
+
+---
+
+## Criterios de aceptación
+
+- [ ] `npm run build` pasa sin errores tras los cambios.
+- [ ] En DevTools Performance, con CPU throttling 4x, nivel 5+, skin `neon`, 30s de juego continuo: FPS promedio ≥55.
+- [ ] El mismo protocolo en skin `retro` también sostiene FPS promedio ≥55.
+- [ ] Visualmente, las 3 skins (`classic`, `neon`, `retro`) se ven igual que antes del cambio (autos, camiones, troncos, tortugas, metas, rana, HUD, scanlines de `retro`) — comparación manual contra las capturas existentes en `.playwright-screenshots/frogger-*.png`.
+- [ ] El gameplay (colisiones, animación de salto, temporizador, subida de nivel, game over) no cambia de comportamiento — solo cambia cómo se dibuja, no cuándo ni con qué lógica.
+- [ ] No se modifica ningún archivo fuera de `lib/games/frogger/engine.ts`.
+
+---
+
+## Decisiones
+
+- **Sí:** medir con DevTools antes y después, en vez de solo verificación visual. Razón: "se siente lento" no es verificable; un número de FPS sí.
+- **Sí:** CPU throttling 4x como proxy de móvil real. Razón: la spec 12 ya agregó soporte táctil móvil, y uno de los síntomas reportados es "peor en móvil" — no se dispone de un dispositivo físico de gama baja para el protocolo de medición, así que el throttling de DevTools es la aproximación estándar.
+- **Sí:** nivel 5+ como escenario de medición. Razón: `levelGapBonus`/`LEVEL_SPEED_STEP` hacen que la densidad y velocidad de entidades suban con el nivel — es el peor caso realista, y explica el síntoma "empeora con el nivel".
+- **Sí:** cachear scanlines en un canvas offscreen en vez de reducir su frecuencia de dibujo (p. ej. cada 2 frames). Razón: un buffer estático es más simple, no introduce parpadeo, y las scanlines no cambian frame a frame.
+- **No:** tocar otros motores en esta spec, aunque compartan el patrón `shadowBlur`. Razón: sin síntoma reportado ni medición en ellos, cambiarlos sería especulativo; se decidió acotar a Frogger y abrir spec aparte si aparece el mismo problema en otro juego.
+- **No:** migrar a WebGL/Pixi. Razón: sobre-ingeniería para el problema medido; el resto del catálogo usa Canvas2D puro y se busca mantener consistencia arquitectónica.
+- **No:** tocar `updateEntities`/`updateFrog` (lógica) de entrada. Razón: el análisis de código apunta al costo de render (`shadowBlur`, `save/restore`, scanlines redibujadas), no a la lógica de actualización; si el profiling del paso 1 contradice esto, se documenta como decisión revisada antes de tocar lógica.
+
+---
+
+## Riesgos
+
+| Riesgo                                                                                                                                              | Mitigación                                                                                                                         |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Agrupar `save`/`restore`/`shadowBlur` por lote introduce una regresión visual sutil (glow que se queda activo en una shape que no debería tenerlo). | Verificación visual manual contra `.playwright-screenshots/frogger-*.png` en las 3 skins antes de cerrar la spec.                  |
+| `OffscreenCanvas` no está disponible en algún navegador objetivo.                                                                                   | Usar un `HTMLCanvasElement` creado en memoria (no adjunto al DOM) como fallback universal en vez de depender de `OffscreenCanvas`. |
+| El profiling del paso 1 muestra que el cuello de botella real está en `updateEntities`/`updateFrog` y no en el render.                              | Se documenta en la spec como hallazgo y se decide ahí mismo si se amplía el alcance o se abre spec nueva — no se asume de entrada. |
+
+---
+
+## Qué **no** está en esta spec
+
+- Cambios a `arkanoid`, `asteroides`, `snake` o `tetris`.
+- Cambios de mecánica, dificultad o balance de niveles de Frogger.
+- Migración a WebGL o librerías de render de terceros.
+- Cambios a la capa táctil (`frogger-canvas.tsx`, `jugar-client.tsx`, `touch-controls.tsx`).
+
+Cada uno de estos, si se necesita, va en su propia spec.
