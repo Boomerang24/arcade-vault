@@ -295,29 +295,64 @@ export class SnakeEngine {
       this.tickMovement();
     }
   }
+  // La cabeza es la única instancia de su tipo por frame (color y blur
+  // propios), así que se dibuja aparte. Todo el cuerpo comparte color y
+  // blur: se acumula en un único beginPath() y se pinta con un solo
+  // fill()/stroke() dentro de un único save/shadowBlur/restore, en vez de
+  // togglear shadowBlur y abrir un path por segmento.
   private drawSnake() {
     const ctx = this.ctx;
     const p = this.palette;
     const skin = this.currentSkin;
-    this.snake.forEach((seg, i) => {
-      const color = i === 0 ? p.head : p.body;
-      const pad = 1;
-      const x = seg.x * CELL + pad;
-      const y = seg.y * CELL + pad;
-      const size = CELL - pad * 2;
-      applySkinGlow(ctx, skin, color, i === 0 ? 14 : 8);
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      ctx.roundRect(x, y, size, size, p.cornerRadius);
-      ctx.fill();
-      if (p.bodyEdge) {
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = p.bodyEdge;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
+    const pad = 1;
+    const size = CELL - pad * 2;
+    const head = this.snake[0];
+    if (!head) return;
+    applySkinGlow(ctx, skin, p.head, 14);
+    ctx.fillStyle = p.head;
+    ctx.beginPath();
+    ctx.roundRect(
+      head.x * CELL + pad,
+      head.y * CELL + pad,
+      size,
+      size,
+      p.cornerRadius,
+    );
+    ctx.fill();
+    if (p.bodyEdge) {
       ctx.shadowBlur = 0;
-    });
+      ctx.strokeStyle = p.bodyEdge;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.shadowBlur = 0;
+    if (this.snake.length < 2) return;
+    ctx.save();
+    applySkinGlow(ctx, skin, p.body, 8);
+    ctx.fillStyle = p.body;
+    // roundRect() abre su propio subpath (como rect()), así que no hace
+    // falta moveTo() previo: no aparece la línea fantasma que sí ocurre
+    // encadenando arc()/ellipse() en un path compartido.
+    ctx.beginPath();
+    for (let i = 1; i < this.snake.length; i++) {
+      const seg = this.snake[i];
+      ctx.roundRect(
+        seg.x * CELL + pad,
+        seg.y * CELL + pad,
+        size,
+        size,
+        p.cornerRadius,
+      );
+    }
+    ctx.fill();
+    if (p.bodyEdge) {
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = p.bodyEdge;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.restore();
+    ctx.shadowBlur = 0;
   }
   // Devuelve el frame del sprite teñido con el color de la skin actual,
   // usando un canvas offscreen + `source-atop` (respeta la transparencia).
@@ -383,13 +418,29 @@ export class SnakeEngine {
     }
     ctx.shadowBlur = 0;
   }
+  // Buffer offscreen con las scanlines pre-renderizadas: se dibuja una
+  // sola vez y luego cada frame solo hace drawImage() del buffer, en vez
+  // de repetir 200 fillRect por frame. No depende de la skin (siempre el
+  // mismo patrón), así que se cachea para toda la vida del engine.
+  private scanlinesBuffer: HTMLCanvasElement | null = null;
+  private getScanlinesBuffer(): HTMLCanvasElement {
+    if (this.scanlinesBuffer) return this.scanlinesBuffer;
+    const buffer = document.createElement("canvas");
+    buffer.width = W;
+    buffer.height = H;
+    const bctx = buffer.getContext("2d");
+    if (bctx) {
+      bctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+      for (let y = 0; y < H; y += 3) {
+        bctx.fillRect(0, y, W, 1);
+      }
+    }
+    this.scanlinesBuffer = buffer;
+    return buffer;
+  }
   // Textura CRT de la skin `retro`: scanlines horizontales sutiles.
   private drawScanlines() {
-    const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
-    for (let y = 0; y < H; y += 3) {
-      ctx.fillRect(0, y, W, 1);
-    }
+    this.ctx.drawImage(this.getScanlinesBuffer(), 0, 0);
   }
   private drawHUD() {
     const ctx = this.ctx;
