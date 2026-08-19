@@ -117,15 +117,28 @@ class Bullet {
     this.ttl -= dt;
     if (this.ttl <= 0) this.dead = true;
   }
-  draw(ctx: CanvasRenderingContext2D, p: Palette, skin: SkinName) {
-    ctx.save();
-    applySkinGlow(ctx, skin, p.bullet, 10);
-    ctx.fillStyle = p.bullet;
+}
+// Todas las balas comparten color y glow: un solo save/shadowBlur/restore para
+// el lote en vez de uno por bala. El fill() se mantiene por bala (y no un path
+// acumulado) porque acumular varios arcos en un mismo path cambia el
+// antialiasing del contorno, y el resultado dejaría de ser idéntico pixel a
+// pixel; las balas son pocas, así que el ahorro estaría en el glow, no aquí.
+function drawBulletBatch(
+  ctx: CanvasRenderingContext2D,
+  bullets: Bullet[],
+  p: Palette,
+  skin: SkinName,
+) {
+  if (bullets.length === 0) return;
+  ctx.save();
+  applySkinGlow(ctx, skin, p.bullet, 10);
+  ctx.fillStyle = p.bullet;
+  for (const b of bullets) {
     ctx.beginPath();
-    ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+    ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
     ctx.fill();
-    ctx.restore();
   }
+  ctx.restore();
 }
 const RADII = [0, 16, 30, 50];
 const SPEEDS = [0, 85, 55, 32];
@@ -195,30 +208,51 @@ class Asteroid {
       new Asteroid(this.x, this.y, this.size - 1),
     ];
   }
-  draw(ctx: CanvasRenderingContext2D, p: Palette, skin: SkinName) {
-    ctx.save();
-    ctx.translate(this.x, this.y);
-    ctx.rotate(this.rot);
-    ctx.strokeStyle = p.asteroid;
-    ctx.lineWidth = 1.5;
-    ctx.lineJoin = "round";
+}
+// Un solo save/shadowBlur/restore para todos los asteroides del frame en vez
+// de uno por asteroide. La transformación de cada uno se aplica con
+// `setTransform()` (equivalente a translate+rotate) en vez de save/restore, y
+// el fill/stroke se mantiene por asteroide para que el resultado sea idéntico
+// pixel a pixel también cuando dos asteroides se solapan (el relleno es
+// translúcido y un path compartido no lo acumularía igual).
+function drawAsteroidBatch(
+  ctx: CanvasRenderingContext2D,
+  asteroids: Asteroid[],
+  p: Palette,
+  skin: SkinName,
+) {
+  if (asteroids.length === 0) return;
+  ctx.save();
+  if (skin === "neon") applySkinGlow(ctx, skin, p.asteroid, 14);
+  else ctx.shadowBlur = 0;
+  ctx.strokeStyle = p.asteroid;
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = "round";
+  // `neon` rellena con glow; `retro` con un tinte fósforo sin glow; `classic` no rellena.
+  const fill =
+    skin === "neon"
+      ? withAlpha(p.asteroid, 0.12)
+      : skin === "retro"
+        ? withAlpha(p.asteroid, 0.1)
+        : null;
+  if (fill) ctx.fillStyle = fill;
+  for (const a of asteroids) {
+    // Se reproduce exactamente la misma secuencia que el código original
+    // (identidad -> translate -> rotate) en vez de componer la matriz a mano:
+    // así el redondeo en punto flotante es idéntico y no cambia ni un pixel
+    // de antialiasing en los bordes.
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.translate(a.x, a.y);
+    ctx.rotate(a.rot);
     ctx.beginPath();
-    ctx.moveTo(this.verts[0][0], this.verts[0][1]);
-    for (let i = 1; i < this.verts.length; i++)
-      ctx.lineTo(this.verts[i][0], this.verts[i][1]);
+    ctx.moveTo(a.verts[0][0], a.verts[0][1]);
+    for (let i = 1; i < a.verts.length; i++)
+      ctx.lineTo(a.verts[i][0], a.verts[i][1]);
     ctx.closePath();
-    if (skin === "neon") {
-      applySkinGlow(ctx, skin, p.asteroid, 14);
-      ctx.fillStyle = withAlpha(p.asteroid, 0.12);
-      ctx.fill();
-    } else if (skin === "retro") {
-      // Relleno tenue tipo fósforo, sin glow.
-      ctx.fillStyle = withAlpha(p.asteroid, 0.1);
-      ctx.fill();
-    }
+    if (fill) ctx.fill();
     ctx.stroke();
-    ctx.restore();
   }
+  ctx.restore();
 }
 class Ship {
   x = 0;
@@ -326,18 +360,30 @@ class Particle {
     this.ttl -= dt;
     if (this.ttl <= 0) this.dead = true;
   }
-  draw(ctx: CanvasRenderingContext2D, p: Palette, skin: SkinName) {
-    const alpha = this.ttl / this.life;
-    ctx.save();
-    applySkinGlow(ctx, skin, p.particle, 8);
+}
+// Todas las partículas comparten glow y grosor: un solo save/shadowBlur/
+// restore para el lote. El `strokeStyle` sí cambia por partícula (cada una
+// tiene su propio alpha de fundido), así que se mantiene un stroke() por
+// partícula y en el orden original, para no alterar el resultado.
+function drawParticleBatch(
+  ctx: CanvasRenderingContext2D,
+  particles: Particle[],
+  p: Palette,
+  skin: SkinName,
+) {
+  if (particles.length === 0) return;
+  ctx.save();
+  applySkinGlow(ctx, skin, p.particle, 8);
+  ctx.lineWidth = 1;
+  for (const q of particles) {
+    const alpha = q.ttl / q.life;
     ctx.strokeStyle = withAlpha(p.particle, Number(alpha.toFixed(2)));
-    ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(this.x, this.y);
-    ctx.lineTo(this.x - this.vx * 0.05, this.y - this.vy * 0.05);
+    ctx.moveTo(q.x, q.y);
+    ctx.lineTo(q.x - q.vx * 0.05, q.y - q.vy * 0.05);
     ctx.stroke();
-    ctx.restore();
   }
+  ctx.restore();
 }
 export class AsteroidesEngine {
   private ctx: CanvasRenderingContext2D;
@@ -486,22 +532,30 @@ export class AsteroidesEngine {
   private get palette(): Palette {
     return SKIN_PALETTES[this.currentSkin];
   }
-  private drawLifeIcon(x: number, y: number) {
+  // Los iconos de vida comparten color, glow y transformación de rotación:
+  // un solo save/shadowBlur/restore para los N iconos, con `setTransform()`
+  // por icono en vez de save/translate/rotate/restore.
+  private drawLives() {
+    if (this.lives <= 0) return;
     const ctx = this.ctx;
+    const hud = this.palette.hud;
     ctx.save();
-    ctx.translate(x, y);
-    ctx.rotate(-Math.PI / 2);
-    applySkinGlow(ctx, this.currentSkin, this.palette.hud, 8);
-    ctx.strokeStyle = this.palette.hud;
+    applySkinGlow(ctx, this.currentSkin, hud, 8);
+    ctx.strokeStyle = hud;
     ctx.lineWidth = 1.2;
     ctx.lineJoin = "round";
-    ctx.beginPath();
-    ctx.moveTo(9, 0);
-    ctx.lineTo(-6, -5);
-    ctx.lineTo(-3, 0);
-    ctx.lineTo(-6, 5);
-    ctx.closePath();
-    ctx.stroke();
+    for (let i = 0; i < this.lives; i++) {
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.translate(W - 16 - i * 22, 18);
+      ctx.rotate(-Math.PI / 2);
+      ctx.beginPath();
+      ctx.moveTo(9, 0);
+      ctx.lineTo(-6, -5);
+      ctx.lineTo(-3, 0);
+      ctx.lineTo(-6, 5);
+      ctx.closePath();
+      ctx.stroke();
+    }
     ctx.restore();
   }
   private drawHUD() {
@@ -516,7 +570,7 @@ export class AsteroidesEngine {
     ctx.textAlign = "center";
     ctx.fillText(`NIVEL ${this.level}`, W / 2, 26);
     ctx.restore();
-    for (let i = 0; i < this.lives; i++) this.drawLifeIcon(W - 16 - i * 22, 18);
+    this.drawLives();
   }
   private drawOverlay(title: string, sub: string) {
     const ctx = this.ctx;
@@ -533,12 +587,33 @@ export class AsteroidesEngine {
     ctx.fillText(sub, W / 2, H / 2 + 22);
     ctx.restore();
   }
+  // Buffer offscreen con las scanlines pre-renderizadas: se dibuja una sola
+  // vez y luego cada frame solo hace drawImage() del buffer, en vez de repetir
+  // 200 fillRect por frame. El patrón no depende de la skin (siempre el mismo),
+  // así que se cachea para toda la vida del engine.
+  private scanlinesBuffer: HTMLCanvasElement | null = null;
+  private getScanlinesBuffer(): HTMLCanvasElement {
+    if (this.scanlinesBuffer) return this.scanlinesBuffer;
+    const buffer = document.createElement("canvas");
+    buffer.width = W;
+    buffer.height = H;
+    const bctx = buffer.getContext("2d");
+    if (bctx) {
+      // Las líneas se guardan en negro opaco y el 0.22 se aplica al componer
+      // con `globalAlpha`: guardar el alpha dentro del buffer lo cuantizaría a
+      // 56/255 y el resultado quedaría 1 nivel por debajo del `fillRect` original.
+      bctx.fillStyle = "#000000";
+      for (let y = 0; y < H; y += 3) bctx.fillRect(0, y, W, 1);
+    }
+    this.scanlinesBuffer = buffer;
+    return buffer;
+  }
   // Textura CRT de la skin `retro`: scanlines horizontales sutiles.
   private drawScanlines() {
     const ctx = this.ctx;
     ctx.save();
-    ctx.fillStyle = "rgba(0,0,0,0.22)";
-    for (let y = 0; y < H; y += 3) ctx.fillRect(0, y, W, 1);
+    ctx.globalAlpha = 0.22;
+    ctx.drawImage(this.getScanlinesBuffer(), 0, 0);
     ctx.restore();
   }
   private draw() {
@@ -547,9 +622,10 @@ export class AsteroidesEngine {
     const skin = this.currentSkin;
     ctx.fillStyle = pal.background;
     ctx.fillRect(0, 0, W, H);
-    this.particles.forEach((p) => p.draw(ctx, pal, skin));
-    this.asteroids.forEach((a) => a.draw(ctx, pal, skin));
-    this.bullets.forEach((b) => b.draw(ctx, pal, skin));
+    drawParticleBatch(ctx, this.particles, pal, skin);
+    drawAsteroidBatch(ctx, this.asteroids, pal, skin);
+    drawBulletBatch(ctx, this.bullets, pal, skin);
+    // La nave es instancia única por frame: no hay lote que agrupar.
     this.ship.draw(ctx, pal, skin);
     if (skin === "retro") this.drawScanlines();
     this.drawHUD();

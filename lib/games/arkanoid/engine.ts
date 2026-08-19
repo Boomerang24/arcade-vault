@@ -496,21 +496,18 @@ export class ArkanoidEngine {
     this.tintCache.set(key, off);
     return off;
   }
-  private drawSprite(
+  // Solo el blit del frame (teñido o no), sin tocar el estado de glow: lo
+  // gestiona quien llama, una vez por sprite suelto (drawSprite) o una vez
+  // por lote de sprites del mismo tinte (drawBricks).
+  private blitSprite(
     sprite: SpriteFrame,
     x: number,
     y: number,
     w: number,
     h: number,
-    tint: Tint = null,
+    tint: Tint,
   ) {
-    if (!this.spritesLoaded) return;
     const ctx = this.ctx;
-    const glow = this.palette.glow;
-    if (glow > 0 && tint) {
-      ctx.shadowBlur = glow;
-      ctx.shadowColor = tint.color;
-    }
     const tinted = tint ? this.getTintedFrame(sprite, tint) : null;
     if (tinted) {
       ctx.drawImage(tinted, 0, 0, sprite.sw, sprite.sh, x, y, w, h);
@@ -527,6 +524,23 @@ export class ArkanoidEngine {
         h,
       );
     }
+  }
+  private drawSprite(
+    sprite: SpriteFrame,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    tint: Tint = null,
+  ) {
+    if (!this.spritesLoaded) return;
+    const ctx = this.ctx;
+    const glow = this.palette.glow;
+    if (glow > 0 && tint) {
+      ctx.shadowBlur = glow;
+      ctx.shadowColor = tint.color;
+    }
+    this.blitSprite(sprite, x, y, w, h, tint);
     if (glow > 0 && tint) {
       ctx.shadowBlur = 0;
       ctx.shadowColor = "transparent";
@@ -553,27 +567,71 @@ export class ArkanoidEngine {
       this.palette.ball,
     );
   }
+  // Los ladrillos se dibujan en lotes: el glow (shadowBlur/shadowColor) se
+  // activa una vez por lote en vez de una vez por ladrillo — con 56 ladrillos
+  // en el nivel 3 eso baja de 224 a 28 escrituras de estado por frame en la
+  // skin `neon`. El lote se corta por *corrida consecutiva* del mismo color y
+  // no agrupando globalmente por color, para conservar exactamente el orden
+  // de dibujo original (el glow de una fila desborda sobre la vecina, así que
+  // reordenar filas cambiaría el solape de glows).
   private drawBricks() {
+    if (!this.spritesLoaded) return;
+    const ctx = this.ctx;
+    const glow = this.palette.glow;
+    let batchColor: string | null = null;
+    let batchTint: Tint = null;
+    const closeBatch = () => {
+      if (glow > 0 && batchTint) {
+        ctx.shadowBlur = 0;
+        ctx.shadowColor = "transparent";
+      }
+    };
     for (const brick of this.bricks) {
       if (!brick.active) continue;
       const sprite = SPRITES.blocks[brick.color];
-      if (sprite)
-        this.drawSprite(
-          sprite,
-          brick.x,
-          brick.y,
-          brick.width,
-          brick.height,
-          this.palette.bricks[brick.color] ?? null,
-        );
+      if (!sprite) continue;
+      if (brick.color !== batchColor) {
+        closeBatch();
+        batchColor = brick.color;
+        batchTint = this.palette.bricks[brick.color] ?? null;
+        if (glow > 0 && batchTint) {
+          ctx.shadowBlur = glow;
+          ctx.shadowColor = batchTint.color;
+        }
+      }
+      this.blitSprite(
+        sprite,
+        brick.x,
+        brick.y,
+        brick.width,
+        brick.height,
+        batchTint,
+      );
     }
+    closeBatch();
+  }
+  // Buffer offscreen con las scanlines pre-renderizadas: se dibuja una sola
+  // vez y luego cada frame solo hace drawImage() del buffer, en vez de repetir
+  // 200 fillRect por frame. El patrón no depende de la skin (siempre el mismo
+  // color y paso), así que se cachea para toda la vida del engine.
+  private scanlinesBuffer: HTMLCanvasElement | null = null;
+  private getScanlinesBuffer(): HTMLCanvasElement {
+    if (this.scanlinesBuffer) return this.scanlinesBuffer;
+    const buffer = document.createElement("canvas");
+    buffer.width = W;
+    buffer.height = H;
+    const bctx = buffer.getContext("2d");
+    if (bctx) {
+      bctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+      for (let y = 0; y < H; y += 3) {
+        bctx.fillRect(0, y, W, 1);
+      }
+    }
+    this.scanlinesBuffer = buffer;
+    return buffer;
   }
   private drawScanlines() {
-    const ctx = this.ctx;
-    ctx.fillStyle = "rgba(0, 0, 0, 0.22)";
-    for (let y = 0; y < H; y += 3) {
-      ctx.fillRect(0, y, W, 1);
-    }
+    this.ctx.drawImage(this.getScanlinesBuffer(), 0, 0);
   }
   private drawExplosions() {
     const now = performance.now();
