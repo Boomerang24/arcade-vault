@@ -37,6 +37,10 @@ export function JugarClient({ game }: { game: Game }) {
   const [skin, setSkin] = useState(registered?.skins?.[0]?.id ?? "");
   const level = registered ? engineLevel : Math.floor(score / 2500) + 1;
   useEffect(() => {
+    // La sesión resuelve async; sincroniza el nombre pre-rellenado cuando llega.
+    if (user) setName(user.name);
+  }, [user]);
+  useEffect(() => {
     if (registered || over || paused) return;
     const t = setInterval(
       () => setScore((s) => s + Math.floor(10 + Math.random() * 90)),
@@ -213,24 +217,35 @@ export function JugarClient({ game }: { game: Game }) {
             <div className="final-label">PUNTUACIÓN FINAL</div>
             <div className="final">{score.toLocaleString("es-ES")}</div>
             {!saved ? (
-              <div className="input-row">
-                <input
-                  value={name}
-                  onChange={(e) =>
-                    setName(e.target.value.toUpperCase().slice(0, 10))
-                  }
-                  placeholder="TUS INICIALES"
-                />
-                <button
-                  className="btn yellow"
-                  onClick={async () => {
-                    await saveScore({ game: game.id, score, name });
-                    setSaved(true);
-                  }}
-                >
-                  GUARDAR PUNTUACIÓN
-                </button>
-              </div>
+              user ? (
+                <div className="input-row">
+                  <input
+                    value={name}
+                    onChange={(e) =>
+                      setName(e.target.value.toUpperCase().slice(0, 10))
+                    }
+                    placeholder="TUS INICIALES"
+                  />
+                  <button
+                    className="btn yellow"
+                    onClick={async () => {
+                      await saveScore({ game: game.id, score, name });
+                      setSaved(true);
+                    }}
+                  >
+                    GUARDAR PUNTUACIÓN
+                  </button>
+                </div>
+              ) : (
+                <div className="input-row">
+                  <button
+                    className="btn yellow"
+                    onClick={() => router.push("/iniciar-sesion")}
+                  >
+                    INICIA SESIÓN PARA GUARDAR TU PUNTAJE
+                  </button>
+                </div>
+              )
             ) : (
               <div className="toast-saved">▸ PUNTUACIÓN GUARDADA_</div>
             )}
