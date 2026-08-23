@@ -14,40 +14,34 @@ The UI copy, specs, and skills are in **Spanish**. Match that language when writ
 
 Features go through specs in `specs/NN-slug.md` (`Draft` → `Approved` → `Implemented`).
 
-- `/spec` — write a new spec (skill from `Klerith/fernando-skills`, installed in `.agents/skills/`, see `skills-lock.json`).
-- `/spec-impl NN-slug` — implement an approved spec. Creates branch `spec-NN-slug` automatically (`specs/.spec-config.yml`, `AutoCreateBranch: true`), then PR to `main`.
-- `/add-game <ref-folder|descripción>` — project-local skill (`.claude/skills/add-game/`) that generates a spec for porting/creating a playable game with a real engine + Supabase leaderboard. It **never writes code**; implementation always goes through `/spec-impl`. Its code contract lives in `.claude/skills/add-game/template.md`.
+- `/spec` — write a new spec (`.claude/skills/spec` symlinks to `.agents/skills/spec`, sourced from `Klerith/fernando-skills`, see `skills-lock.json`).
+- `/spec-impl NN-slug` — implement an approved spec (symlinked the same way). Creates branch `spec-NN-slug` automatically (`specs/.spec-config.yml`, `AutoCreateBranch: true`), then PR to `main`.
+- `/add-game <ref-folder|descripción>` — project-local skill (`.claude/skills/add-game/`) that generates a spec for porting/creating a playable game with a real engine + Supabase leaderboard. It **never writes code**; implementation always goes through `/spec-impl-game`. Its code contract lives in `.claude/skills/add-game/template.md`.
+- `/spec-impl-game NN-slug` — project-local skill (`.claude/skills/spec-impl-game/`) for specs that add a new game: runs `/spec-impl`, then automatically chains `@skin-designer` and `@mobile-porter` on that game so it ships with skins and touch support. Use this instead of plain `/spec-impl` whenever the spec's game is new to the catalog.
 
-Do not jump straight to code for a feature — write or find the spec first. Specs 01–10 are implemented.
+Do not jump straight to code for a feature — write or find the spec first. Specs 01–14 are implemented. `@game-jam` drafts live outside `specs/` in `specs/game-jam/<game-id>/` until reviewed, renumbered, and moved in — currently `voltio` and `sinapsis` are pending there.
 
-### `@game-planner` subagent
+### Subagents
 
-Before deciding _which_ game to add next, use the `@game-planner` subagent (`.claude/agents/game-planner.md`). It weighs technical fit against the engine contract (`EngineStats`) and category diversity across the catalog, and keeps a persistent, git-tracked memory of suggestions in `references/game-suggestions-todo.md` (Pendientes/Descartadas/Implementadas) so proposals aren't re-derived or repeated across sessions. It **never writes code or specs** — its recommendation feeds into `/add-game`.
+| Agente                      | Qué hace                                                                                                                                                                                                                                                                        | Definición                                   |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| `@game-planner`             | Propone qué juego añadir a continuación, sopesando encaje con `EngineStats` y diversidad de categorías. No escribe código ni specs; alimenta a `/add-game`. Memoria: `references/game-suggestions-todo.md`.                                                                     | `.claude/agents/game-planner.md`             |
+| `@game-jam`                 | Dado un tema, inventa un juego original desde cero y escribe 2+ specs (base + mecánicas) en `specs/game-jam/<game-id>/`, formato specs 07/08/09. Autónomo, sin preguntas. No escribe código, nunca marca `Approved`.                                                            | `.claude/agents/game-jam.md`                 |
+| `@skin-designer`            | Dado **un** juego, garantiza ≥3 skins (`classic`/`neon`/`retro`) refactorizando sus colores a una tabla `SKIN_PALETTES` y cableando el selector compartido. Escribe código. Memoria: `references/game-with-themes.md`.                                                          | `.claude/agents/skin-designer.md`            |
+| `@mobile-porter`            | Dado **un** juego, añade soporte táctil móvil (patrón spec 12: `touchActions` en `GAME_REGISTRY`, fila en `TOUCH_DIRECTIONS`, `drawHUD()` si falta). Escribe código, siempre en la play-page. Memoria: `references/mobile-ported-games.md`.                                     | `.claude/agents/mobile-porter.md`            |
+| `@game-performance-booster` | Dado **un** juego, audita por análisis estático el costo de render y aplica las optimizaciones de la spec 14 (batching de `save`/`shadowBlur`, cacheo offscreen de geometría estática). Escribe código, sin memoria persistente (detecta estado leyendo el propio `engine.ts`). | `.claude/agents/game-performance-booster.md` |
 
-### `@game-jam` subagent
+Reglas que no se deducen del nombre:
 
-Given a theme (a phrase, an aesthetic, a mood), the `@game-jam` subagent (`.claude/agents/game-jam.md`) invents one original game from scratch — no porting from `references/started-games/` — and writes it as **2+ complete specs** in `specs/game-jam/<game-id>/` (a base spec with the minimum playable engine + registry + Supabase row, and a mechanics spec layering power-ups/levels/audio on top), matching the format and depth of specs 07/08/09. It is fully autonomous: it never asks questions, deciding every choice (id/title/cat/color/cover/mechanics/`EngineStats` mapping) itself and recording the reasoning in each spec's "Decisiones tomadas y descartadas". It **never writes code**, never touches `apply_migration`, and never marks a spec `Approved`. Its specs live outside `specs/` until the user reviews them, renumbers if needed, moves them into `specs/`, and runs `/spec-impl` on each in dependency order.
-
-### `@skin-designer` subagent
-
-Given the name or id of **one** game, the `@skin-designer` subagent (`.claude/agents/skin-designer.md`) guarantees that game has at least 3 visual skins — `classic` (default, the original look), `neon`, `retro` — by refactoring its engine's color literals into a `SKIN_PALETTES` table (the pattern Tetris already established) and wiring the shared skin selector in `jugar-client.tsx`/`lib/games/registry.ts`. It is one of the subagents that writes code (along with `@mobile-porter` and `@game-performance-booster`): adding skins is a bounded paint-layer refactor of an existing engine, not a new product feature, so it deliberately skips `/spec`/`/spec-impl`. It acts on **one game per run** — it never sweeps the whole catalog — and never extends `EngineStats`, changes mechanics, or adds new sprite assets (spritesheets are tinted at runtime instead). It keeps a persistent, git-tracked memory of which games already have skins and their exact palettes in `references/game-with-themes.md`, so the direction isn't re-derived per session.
-
-### `@mobile-porter` subagent
-
-Dado el nombre o id de **un** juego, el `@mobile-porter` subagent (`.claude/agents/mobile-porter.md`) le añade soporte táctil móvil replicando el patrón ya aprobado e implementado por la spec 12 (`specs/12-controles-tactiles-moviles.md`) en `asteroides`, `tetris`, `arkanoid` y `snake`: registra sus `touchActions` en `GAME_REGISTRY`, añade su fila al mapa `TOUCH_DIRECTIONS` de `jugar-client.tsx`, y si el motor no dibuja estadísticas en vivo le agrega un `drawHUD()` calcado del de `arkanoid`/`snake`. Es otro de estos subagentes que **sí escribe código** (junto a `@skin-designer` y `@game-performance-booster`), por la misma razón: es un cableado acotado de la capa de presentación, no una feature de producto, así que se salta `/spec`/`/spec-impl`. Cablea siempre en la play-page — **nunca toca `components/games/<id>-canvas.tsx`** ni reescribe `touch-controls.tsx`/`mobile-footer.tsx`, que son infraestructura compartida ya terminada. Actúa **un juego por corrida** y mantiene memoria persistente de qué juegos ya están portados en `references/mobile-ported-games.md`. Un juego nuevo en el catálogo no se considera terminado hasta pasar por `@mobile-porter` (riesgo anotado en la propia spec 12: sin `drawHUD()`, un juego nuevo se queda sin estadísticas visibles en móvil).
-
-### `@game-performance-booster` subagent
-
-Dado el nombre o id de **un** juego, el `@game-performance-booster` subagent (`.claude/agents/game-performance-booster.md`) audita el costo de render de su motor mediante análisis estático del código y le aplica las optimizaciones que la spec 14 (`specs/14-optimizacion-render-frogger.md`) generalizó tras resolver el jank de Frogger: agrupar `save()`/`shadowBlur()`/`restore()` por lote de entidades en vez de por entidad, y cachear en un canvas offscreen la geometría estática que se redibuja igual cada frame. Es el tercer subagente de estos que **sí escribe código** (junto a `@skin-designer` y `@mobile-porter`), por la misma razón: es un refactor acotado de render sobre un motor existente, no una feature de producto, así que se salta `/spec`/`/spec-impl`. No abre un navegador ni mide en vivo: cuantifica el ahorro por conteo de llamadas de dibujo y entrega al usuario un snippet de consola listo para Chrome real más una checklist de revisión visual, para que la medición y verificación reales las haga un humano con CPU throttling (no el FPS meter headless). Actúa **un juego por corrida**. A diferencia de `@skin-designer`/`@mobile-porter`, **no tiene memoria persistente** en `references/` — detecta si un juego ya está optimizado leyendo evidencia directamente en su `engine.ts` (batching + cacheo ya presentes, como en `frogger`), no consultando una tabla de estado.
+- `@skin-designer`, `@mobile-porter` y `@game-performance-booster` escriben código pero se saltan `/spec`/`/spec-impl` a propósito — son refactors acotados de una capa existente, no features de producto.
+- Los cinco actúan **un juego por corrida**; ninguno recorre el catálogo completo.
+- Un juego nuevo no se considera terminado hasta pasar por `@skin-designer` y `@mobile-porter` (o usar `/spec-impl-game`, que los encadena automáticamente).
 
 ## Skills
 
-- Use siempre `/frontend-design` para diseñar la interfaz de usuario.
-- `/add-game` para cualquier juego nuevo (ver arriba). Considera invocar `@game-planner` antes, para decidir qué juego conviene.
-- `@game-jam` para prototipar rápido un juego nuevo a partir de un tema, sin preguntas — genera specs de borrador en `specs/game-jam/` para revisar. Úsalo en vez de `/add-game` cuando solo hay un tema y no una descripción concreta ya decidida.
-- `@skin-designer <juego>` para dotar a un juego existente de al menos 3 skins (classic/neon/retro). Escribe código directamente, un juego por corrida — no genera spec.
-- `@mobile-porter <juego>` para darle soporte táctil móvil a un juego del catálogo (gamepad, MobileFooter, HUD en canvas), siguiendo el patrón de la spec 12. Escribe código directamente, un juego por corrida — no genera spec.
-- `@game-performance-booster <juego>` para auditar y optimizar el render de un juego del catálogo, siguiendo los patrones generalizados por la spec 14. Escribe código directamente, un juego por corrida — no genera spec ni deja memoria persistente.
+- `/frontend-design` (skill **global**, `~/.claude/skills/frontend-design`, no vive en este repo) — usar siempre para diseñar interfaz de usuario.
+- `/add-game` y `/spec-impl-game` — ver "Spec Driven Design" arriba. Considera invocar `@game-planner` antes de `/add-game` para decidir qué juego conviene.
+- El resto de skills de arriba (`@game-jam`, `@skin-designer`, `@mobile-porter`, `@game-performance-booster`) están documentadas en la tabla de subagentes.
 
 ## Architecture
 
@@ -65,7 +59,7 @@ Tailwind v4 is CSS-first in `app/globals.css` (`@import "tailwindcss"`, no `tail
 
 - Clients: `lib/supabase/client.ts` (browser) and `lib/supabase/server.ts` (server, `@supabase/ssr`). Env in `.env.local` (see `.env.template`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, plus `RESEND_API_KEY` / `CONTACT_TO_EMAIL`.
 - Tables: `games` (`id, title, short, long, cat, cover, color, best, plays`) and `scores` (`id, game_id, name, score, created_at`).
-- Accessors: `lib/games.ts` (`getGames`, `getGame`), `lib/scores.ts` (`getTopScores`, `getAllTopScores` — these map snake_case rows to camelCase).
+- Accessors: `lib/games.ts` (`getGames`, `getGame`), `lib/scores.ts` (`getTopScores`, `getAllTopScores` — these map snake_case rows to camelCase), `lib/data.ts` (shared static/config data).
 - Schema changes go through `mcp__supabase__apply_migration` (Supabase MCP server configured in `.mcp.json`), during `/spec-impl` — not from a spec-writing skill.
 - Auth is **not** Supabase Auth: `components/auth-provider.tsx` is a lightweight `localStorage` context (`av_user`) that also exposes `saveScore`. It reads storage only inside `useEffect` to keep server/client markup identical.
 
@@ -74,17 +68,18 @@ Tailwind v4 is CSS-first in `app/globals.css` (`@import "tailwindcss"`, no `tail
 Every game follows the same contract; do not add per-game branches to shared components.
 
 - `lib/games/<id>/engine.ts` — plain TS engine, decoupled from React. Constructor `(canvas, callbacks)`, methods `pause/resume/reset/forceGameOver/destroy`, reports through `EngineCallbacks` (`onStats`, `onGameOver`). Multi-canvas games (Tetris) may take an object of canvases as the first arg; nothing else changes.
-- `components/games/<id>-canvas.tsx` — `forwardRef` wrapper exposing `GameEngineHandle`.
-- `lib/games/registry.ts` — `GAME_REGISTRY` / `getRegisteredGame(id)` maps game id → canvas component. **Adding a game is one line here.** `components/jugar-client.tsx` reads only the registry.
-- Shared types (`EngineStats`, `GameEngineHandle`, `GameCanvasProps`) live in the registry. **Never extend `EngineStats`** — force the mapping and document it in the spec instead.
-- Current games: `asteroides`, `tetris`, `arkanoid`, `snake` and more...
-  (see `references/implemented-games.md`) when you to check which games are implemented and how to implement new ones.
-- Game assets under `public/games/<id>/`.
+- `components/games/<id>-canvas.tsx` — `forwardRef` wrapper exposing `GameEngineHandle`. Shared, cross-game presentation lives in `components/games/touch-controls.tsx` and `mobile-footer.tsx` — treat these as finished infrastructure, don't fork them per game.
+- `lib/games/registry.ts` — `GAME_REGISTRY` / `getRegisteredGame(id)` maps game id → `{ Canvas, skins?, touchActions? }`. **Adding a game is one line here.** `components/jugar-client.tsx` reads only the registry.
+- Shared types (`EngineStats`, `GameEngineHandle`, `GameCanvasProps`, `SkinOption`, `TouchAction`, `REQUIRED_SKINS`) live in the registry. **Never extend `EngineStats`** — force the mapping and document it in the spec instead.
+- Current games: `asteroides`, `tetris`, `arkanoid`, `snake`, `frogger` (see `references/implemented-games.md` for the Supabase-backed catalog snapshot — check its date before trusting it, it isn't auto-updated).
+- Game assets under `public/games/<id>/` — only for games with real sprites/spritesheets (`arkanoid`, `snake`); the rest render procedurally with no assets folder.
 
 ### Reference material
 
 - `references/started-games/` — original vanilla-JS games being ported (the code is the source of truth, their READMEs are often aspirational).
 - `references/templates/` — the original JSX/HTML mockups the UI was ported from.
+- `references/gamepad-assets/`, `references/source-assets/` — art/asset sources for the touch gamepad and game sprites.
+- `references/*.md` memory files, each owned by one subagent that's the only writer to it: `game-suggestions-todo.md` (`@game-planner`), `game-with-themes.md` (`@skin-designer`), `mobile-ported-games.md` (`@mobile-porter`), `implemented-games.md` (manual catalog snapshot, not agent-owned).
 
 ## Tooling
 
