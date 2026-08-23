@@ -21,7 +21,7 @@ El spec 04 dejó explícitamente fuera de alcance "reemplazar el login/signup fa
 - Login con email + contraseña (`supabase.auth.signInWithPassword`).
 - Login con Google y GitHub OAuth (`supabase.auth.signInWithOAuth`), cableando los botones ya existentes en `app/iniciar-sesion/page.tsx`. Requiere pasos manuales de configuración fuera del editor (ver "Pasos manuales de configuración" más abajo) — el código queda funcional una vez esos pasos se completen.
 - Ruta de callback `app/auth/callback/route.ts` (`GET`) que intercambia el `code` de OAuth por una sesión (`exchangeCodeForSession`), patrón oficial de `@supabase/ssr` para App Router.
-- `middleware.ts` (raíz del proyecto) + `lib/supabase/middleware.ts`, refrescando la sesión de Supabase en cada request según el patrón oficial de `@supabase/ssr`.
+- `proxy.ts` (raíz del proyecto) + `lib/supabase/middleware.ts`, refrescando la sesión de Supabase en cada request según el patrón oficial de `@supabase/ssr`. Nota: Next.js 16 deprecó el nombre de archivo `middleware.ts` en favor de `proxy.ts` (mismo comportamiento, export renombrado a `proxy`); este spec usa la convención vigente del proyecto en vez del nombre literal de Supabase docs.
 - Logout real (`supabase.auth.signOut()`).
 - Recuperación de contraseña: enlace "¿Olvidaste tu contraseña?" en el tab de login → `supabase.auth.resetPasswordForEmail(email, { redirectTo: .../restablecer-password })` → página nueva `app/restablecer-password/page.tsx` que llama `supabase.auth.updateUser({ password })` con la sesión de recuperación ya activa.
 - Reescritura de `components/auth-provider.tsx`: `user` se deriva de `supabase.auth.getUser()` / `onAuthStateChange` (ya no de `localStorage`); `login`/`logout`/`signUp` pasan a llamar a Supabase; se agrega `resetPassword` y `signInWithOAuth` al contexto.
@@ -71,7 +71,7 @@ type User = {
 ## Plan de implementación
 
 1. **Migración de `scores`.** Aplicar la migración de arriba con `mcp__supabase__apply_migration`. El sistema sigue funcional: la columna nueva es nullable y nada la usa todavía.
-2. **Middleware de sesión.** Crear `lib/supabase/middleware.ts` (función `updateSession(request)` con el patrón oficial `@supabase/ssr`: `createServerClient` + `getUser()` para refrescar cookies) y `middleware.ts` en la raíz que lo invoca con el `matcher` recomendado (excluye assets estáticos). Verificación manual: la app sigue cargando todas las rutas sin errores.
+2. **Middleware de sesión.** Crear `lib/supabase/middleware.ts` (función `updateSession(request)` con el patrón oficial `@supabase/ssr`: `createServerClient` + `getUser()` para refrescar cookies) y `proxy.ts` en la raíz (convención Next.js 16, reemplaza el `middleware.ts` deprecado) que lo invoca con el `matcher` recomendado (excluye assets estáticos). Verificación manual: la app sigue cargando todas las rutas sin errores.
 3. **Reescribir `components/auth-provider.tsx`.** `user` se popula desde `supabase.auth.getUser()` en el `useEffect` inicial y se mantiene con `supabase.auth.onAuthStateChange`. Se agregan `signUp(email, password, name)`, `login(email, password)` (renombra el `signInWithPassword`), `signInWithOAuth(provider)`, `logout` (→ `signOut`), `resetPassword(email)`. `saveScore` agrega `user_id`. Verificación manual: `npm run build` pasa (los componentes que usan `useAuth` aún no están actualizados, se espera error de tipos temporal si el resto del paso no se hace en el mismo commit).
 4. **Callback de OAuth.** Crear `app/auth/callback/route.ts` (`GET`): lee `code` de `searchParams`, llama `exchangeCodeForSession`, redirige a `/`. Verificación: no se puede probar end-to-end sin credenciales OAuth reales (ver Riesgos), pero la ruta debe compilar y responder sin `code` con un error controlado (no un 500 sin manejar).
 5. **Página `restablecer-password`.** Crear `app/restablecer-password/page.tsx`: formulario de nueva contraseña, llama `supabase.auth.updateUser({ password })`, muestra éxito/error, redirige a `/` tras éxito. Verificación manual: formulario renderiza y valida longitud mínima antes de enviar.
@@ -101,7 +101,7 @@ type User = {
 - [ ] Con sesión activa, guardar un puntaje inserta una fila en `scores` con `user_id` igual al `id` del usuario logueado (verificable con `mcp__supabase__execute_sql`).
 - [ ] El modo invitado (navegar y jugar sin cuenta) sigue funcionando exactamente igual que antes de este spec, salvo el guardado de puntaje.
 - [ ] Los botones GOOGLE/GITHUB llaman a `signInWithOAuth` y compilan sin error — el flujo end-to-end de OAuth queda marcado como **verificación manual pendiente** hasta que el usuario complete los pasos de configuración externos (ver arriba); no es bloqueante para cerrar esta spec.
-- [ ] `middleware.ts` refresca la sesión sin romper ninguna ruta existente (`/`, `/biblioteca`, `/juego/[id]`, `/juego/[id]/jugar`, `/salon-de-la-fama`, `/about`, `/iniciar-sesion`).
+- [ ] `proxy.ts` refresca la sesión sin romper ninguna ruta existente (`/`, `/biblioteca`, `/juego/[id]`, `/juego/[id]/jugar`, `/salon-de-la-fama`, `/about`, `/iniciar-sesion`).
 
 ---
 
@@ -123,7 +123,7 @@ type User = {
 | ------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | OAuth (Google/GitHub) no se puede probar end-to-end sin credenciales reales configuradas fuera del editor.                                 | Código y ruta de callback quedan implementados y compilando; el criterio de aceptación de OAuth queda marcado como verificación manual pendiente, no bloqueante.  |
 | Confirmación de email no funciona si el proyecto de Supabase no tiene un proveedor SMTP configurado (usa el default limitado de Supabase). | Se documenta como parte de los pasos manuales; en desarrollo se puede leer el link de confirmación desde los logs de Supabase Auth sin depender del correo real.  |
-| `middleware.ts` mal configurado puede bloquear rutas públicas o crear loops de redirect.                                                   | `matcher` sigue el patrón oficial de `@supabase/ssr` (excluye estáticos); verificación manual de las 7 rutas listadas en Criterios de aceptación antes de cerrar. |
+| `proxy.ts` mal configurado puede bloquear rutas públicas o crear loops de redirect.                                                        | `matcher` sigue el patrón oficial de `@supabase/ssr` (excluye estáticos); verificación manual de las 7 rutas listadas en Criterios de aceptación antes de cerrar. |
 | Password reset con `redirectTo` mal formado en producción vs. desarrollo (URL absoluta vs relativa).                                       | Usar `${process.env.NEXT_PUBLIC_SITE_URL ?? request origin}` como base; si `NEXT_PUBLIC_SITE_URL` no existe aún en `.env.template`, se agrega en esta spec.       |
 
 ---
