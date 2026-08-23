@@ -38,7 +38,10 @@ export function JugarClient({ game }: { game: Game }) {
   const level = registered ? engineLevel : Math.floor(score / 2500) + 1;
   useEffect(() => {
     // La sesión resuelve async; sincroniza el nombre pre-rellenado cuando llega.
-    if (user) setName(user.name);
+    if (user) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setName(user.name);
+    }
   }, [user]);
   useEffect(() => {
     if (registered || over || paused) return;

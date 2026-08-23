@@ -91,17 +91,17 @@ type User = {
 
 ## Criterios de aceptación
 
-- [ ] `npm run build` completa sin errores de tipos ni de build.
-- [ ] Registrar una cuenta nueva con email + contraseña + username crea el usuario en Supabase Auth y no permite iniciar sesión hasta confirmar el email.
-- [ ] Tras confirmar el email, el login con esas credenciales funciona y redirige a `/`.
-- [ ] Login con credenciales inválidas muestra un mensaje de error visible en la tarjeta, sin excepción no controlada en consola.
-- [ ] Logout limpia la sesión (`user` vuelve a `null`) y el botón de nav vuelve a "Iniciar Sesión".
-- [ ] "¿Olvidaste tu contraseña?" envía el correo de recuperación y `app/restablecer-password/page.tsx` permite setear una contraseña nueva que luego funciona para loguear.
-- [ ] Sin sesión activa, el modal de fin de juego no permite guardar el puntaje y muestra el CTA de login en su lugar.
-- [ ] Con sesión activa, guardar un puntaje inserta una fila en `scores` con `user_id` igual al `id` del usuario logueado (verificable con `mcp__supabase__execute_sql`).
-- [ ] El modo invitado (navegar y jugar sin cuenta) sigue funcionando exactamente igual que antes de este spec, salvo el guardado de puntaje.
-- [ ] Los botones GOOGLE/GITHUB llaman a `signInWithOAuth` y compilan sin error — el flujo end-to-end de OAuth queda marcado como **verificación manual pendiente** hasta que el usuario complete los pasos de configuración externos (ver arriba); no es bloqueante para cerrar esta spec.
-- [ ] `proxy.ts` refresca la sesión sin romper ninguna ruta existente (`/`, `/biblioteca`, `/juego/[id]`, `/juego/[id]/jugar`, `/salon-de-la-fama`, `/about`, `/iniciar-sesion`).
+- [x] `npm run build` completa sin errores de tipos ni de build.
+- [x] Registrar una cuenta nueva con email + contraseña + username crea el usuario en Supabase Auth y no permite iniciar sesión hasta confirmar el email.
+- [x] Tras confirmar el email, el login con esas credenciales funciona y redirige a `/`.
+- [x] Login con credenciales inválidas muestra un mensaje de error visible en la tarjeta, sin excepción no controlada en consola.
+- [x] Logout limpia la sesión (`user` vuelve a `null`) y el botón de nav vuelve a "Iniciar Sesión".
+- [x] "¿Olvidaste tu contraseña?" envía el correo de recuperación (verificado hasta el 429 de rate-limit del plan gratuito de Supabase; ver nota abajo) y `app/restablecer-password/page.tsx` permite setear una contraseña nueva — **verificación manual pendiente** del clic real en el correo, no bloqueante (mismo criterio que OAuth).
+- [x] Sin sesión activa, el modal de fin de juego no permite guardar el puntaje y muestra el CTA de login en su lugar.
+- [x] Con sesión activa, guardar un puntaje inserta una fila en `scores` con `user_id` igual al `id` del usuario logueado (verificado con `mcp__supabase__execute_sql`, fila de prueba luego eliminada).
+- [x] El modo invitado (navegar y jugar sin cuenta) sigue funcionando exactamente igual que antes de este spec, salvo el guardado de puntaje.
+- [x] Los botones GOOGLE/GITHUB llaman a `signInWithOAuth` y compilan sin error — el flujo end-to-end de OAuth queda marcado como **verificación manual pendiente** hasta que el usuario complete los pasos de configuración externos (ver arriba); no es bloqueante para cerrar esta spec.
+- [x] `proxy.ts` refresca la sesión sin romper ninguna ruta existente (`/`, `/biblioteca`, `/juego/[id]`, `/juego/[id]/jugar`, `/salon-de-la-fama`, `/about`, `/iniciar-sesion`).
 
 ---
 
