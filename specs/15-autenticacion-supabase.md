@@ -28,7 +28,7 @@ El spec 04 dejó explícitamente fuera de alcance "reemplazar el login/signup fa
 - Estados de error y carga en `app/iniciar-sesion/page.tsx`: credenciales inválidas, email ya registrado, contraseña débil (<6 caracteres, mínimo de Supabase), email sin confirmar, error de red — cada uno con un mensaje visible en la tarjeta, y el botón de submit deshabilitado + texto "..." mientras la request está en vuelo.
 - Migración de `scores`: agregar columna `user_id uuid references auth.users(id)`, nullable (para preservar el flujo de invitado). `saveScore` en `auth-provider.tsx` la incluye cuando hay sesión activa.
 - Gating de guardado de puntaje en `components/jugar-client.tsx`: si no hay sesión, el bloque de "guardar puntuación" del modal de game over se reemplaza por un CTA "Inicia sesión para guardar tu puntaje" que enlaza a `/iniciar-sesion`. Si hay sesión, el campo de iniciales se sigue mostrando pero pre-rellenado con el `display_name` del usuario (editable, igual que hoy).
-- `components/nav.tsx` muestra `user.user_metadata.display_name` (o el username guardado) y el logout real.
+- `components/nav.tsx` muestra `user.user_metadata.display_name` (o el username guardado) y el logout real, detrás de un menú desplegable de cuenta con confirmación antes de cerrar sesión (ver "Adenda" al final de esta spec).
 - Después de login/registro/OAuth exitoso, redirect siempre a `/` (igual que el comportamiento actual).
 - Modo invitado se mantiene: sin sesión se puede navegar y jugar; solo el guardado de puntaje requiere sesión (ver arriba).
 
@@ -102,6 +102,7 @@ type User = {
 - [x] El modo invitado (navegar y jugar sin cuenta) sigue funcionando exactamente igual que antes de este spec, salvo el guardado de puntaje.
 - [x] Los botones GOOGLE/GITHUB llaman a `signInWithOAuth` y compilan sin error — el flujo end-to-end de OAuth queda marcado como **verificación manual pendiente** hasta que el usuario complete los pasos de configuración externos (ver arriba); no es bloqueante para cerrar esta spec.
 - [x] `proxy.ts` refresca la sesión sin romper ninguna ruta existente (`/`, `/biblioteca`, `/juego/[id]`, `/juego/[id]/jugar`, `/salon-de-la-fama`, `/about`, `/iniciar-sesion`).
+- [x] (Adenda) El botón de cuenta en `nav.tsx` abre un menú desplegable (nombre + email) en vez de cerrar sesión al primer clic; "Cerrar sesión" pide confirmación en un modal antes de invocar `signOut()`. Verificado en navegador de punta a punta (abrir menú, `Escape`/click-fuera cierra sin desloguear, Cancelar mantiene la sesión, confirmar desloguea y el nav vuelve a "Iniciar Sesión").
 
 ---
 
@@ -138,3 +139,17 @@ type User = {
 - RLS granular más allá del insert de `scores.user_id`.
 
 Cada uno de estos, si se necesita, va en su propia spec.
+
+---
+
+## Adenda — Menú de cuenta y confirmación de cierre de sesión (2026-08-23)
+
+El criterio original ("`nav.tsx` muestra el nombre y el logout real") se cerró con `onClick={logout}` directo en el botón: un clic accidental cerraba la sesión sin aviso. Se resolvió con una mejora de UX pequeña, sin abrir spec aparte:
+
+- `components/nav.tsx`: el botón `{user.name} ▾` ahora abre un menú desplegable (`.av-account`/`.av-account-menu`) con nombre + email del usuario y una única acción, "Cerrar sesión". Se cierra con click-fuera (`.av-menu-backdrop`) o `Escape`.
+- "Cerrar sesión" abre un modal de confirmación reutilizando el marcado y las clases `.modal-bd`/`.modal`/`.actions` ya existentes para el modal de game over (`components/jugar-client.tsx`) — sin CSS de modal nuevo. Botones "Cancelar" / "Cerrar sesión".
+- Confirmar llama `await logout(); router.refresh()` (antes `logout()` no refrescaba el árbol de Server Components tras cerrar sesión).
+- Panel móvil (hamburguesa): si hay sesión, el link "Cuenta" se reemplaza por un botón "Cerrar sesión" que abre el mismo modal.
+- CSS nuevo en `app/globals.css`: `.av-account`, `.av-menu-backdrop`, `.av-account-menu` (+ `.who`, `.sep`, `.item`, `.item.danger`) y `.av-mobile-panel .mobile-logout`, con los tokens existentes (`--bg-2`, `--cyan`, `--magenta`, `--pixel`, `--mono`).
+- No se tocó `components/auth-provider.tsx` — `logout()` conserva su firma.
+- Verificado en navegador con Playwright MCP usando una sesión real existente: abrir menú → `Escape` cierra sin desloguear; abrir menú → confirmar → Cancelar mantiene la sesión; abrir menú → confirmar → Cerrar sesión desloguea y el nav vuelve a "Iniciar Sesión", sin errores de consola. `npm run build` y `npm run lint` limpios.
