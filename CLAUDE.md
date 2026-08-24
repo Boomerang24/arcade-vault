@@ -30,12 +30,14 @@ Do not jump straight to code for a feature — write or find the spec first. Spe
 | `@skin-designer`            | Dado **un** juego, garantiza ≥3 skins (`classic`/`neon`/`retro`) refactorizando sus colores a una tabla `SKIN_PALETTES` y cableando el selector compartido. Escribe código. Memoria: `references/game-with-themes.md`.                                                          | `.claude/agents/skin-designer.md`            |
 | `@mobile-porter`            | Dado **un** juego, añade soporte táctil móvil (patrón spec 12: `touchActions` en `GAME_REGISTRY`, fila en `TOUCH_DIRECTIONS`, `drawHUD()` si falta). Escribe código, siempre en la play-page. Memoria: `references/mobile-ported-games.md`.                                     | `.claude/agents/mobile-porter.md`            |
 | `@game-performance-booster` | Dado **un** juego, audita por análisis estático el costo de render y aplica las optimizaciones de la spec 14 (batching de `save`/`shadowBlur`, cacheo offscreen de geometría estática). Escribe código, sin memoria persistente (detecta estado leyendo el propio `engine.ts`). | `.claude/agents/game-performance-booster.md` |
+| `@security-auditor`         | Audita seguridad de punta a punta: RLS/policies/funciones/grants en Supabase y la capa de app (headers, proxy, API routes, secrets, validación de input). No escribe código ni migraciones; solo reporta y propone `/spec`. Memoria: `references/security/security-audit.md`.   | `.claude/agents/security-auditor.md`         |
 
 Reglas que no se deducen del nombre:
 
 - `@skin-designer`, `@mobile-porter` y `@game-performance-booster` escriben código pero se saltan `/spec`/`/spec-impl` a propósito — son refactors acotados de una capa existente, no features de producto.
-- Los cinco actúan **un juego por corrida**; ninguno recorre el catálogo completo.
+- Los cinco agentes de juegos actúan **un juego por corrida**; ninguno recorre el catálogo completo.
 - Un juego nuevo no se considera terminado hasta pasar por `@skin-designer` y `@mobile-porter` (o usar `/spec-impl-game`, que los encadena automáticamente).
+- `@security-auditor` es la excepción: audita el proyecto **completo** en cada corrida (no un juego a la vez) y es de solo lectura — todo hallazgo accionable sale como propuesta de `/spec`, nunca como código directo.
 
 ## Skills
 
@@ -80,6 +82,7 @@ Every game follows the same contract; do not add per-game branches to shared com
 - `references/templates/` — the original JSX/HTML mockups the UI was ported from.
 - `references/gamepad-assets/`, `references/source-assets/` — art/asset sources for the touch gamepad and game sprites.
 - `references/*.md` memory files, each owned by one subagent that's the only writer to it: `game-suggestions-todo.md` (`@game-planner`), `game-with-themes.md` (`@skin-designer`), `mobile-ported-games.md` (`@mobile-porter`), `implemented-games.md` (manual catalog snapshot, not agent-owned).
+- `references/security/security-checklist.md` — original one-off dump of the Supabase security linter, read-only, never edited by any agent. `references/security/security-audit.md` — the live ledger (severity, evidence, open/closed state), owned and written only by `@security-auditor`.
 
 ## Tooling
 

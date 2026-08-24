@@ -2,6 +2,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/auth-provider";
+const PASSWORD_PATTERN =
+  /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/;
 export default function IniciarSesionPage() {
   const router = useRouter();
   const { login, signUp, signInWithOAuth, resetPassword } = useAuth();
@@ -16,6 +18,12 @@ export default function IniciarSesionPage() {
     e.preventDefault();
     setError(null);
     setResetSent(false);
+    if (tab === "up" && !PASSWORD_PATTERN.test(pass)) {
+      setError(
+        "La contraseña debe tener mínimo 8 caracteres, con mayúsculas, minúsculas, números y símbolos.",
+      );
+      return;
+    }
     setLoading(true);
     const { error: authError } =
       tab === "in"
