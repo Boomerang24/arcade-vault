@@ -1,6 +1,6 @@
 # SPEC 15 — Autenticación real con Supabase Auth
 
-> **Estado:** Approved
+> **Estado:** Implemented
 > **Depende de:** SPEC 04, SPEC 06
 > **Fecha:** 2026-08-22
 > **Objetivo:** Reemplazar el login/registro falso de `localStorage` (`components/auth-provider.tsx`) por autenticación real con Supabase Auth (email/contraseña + Google/GitHub OAuth), con sesión persistida vía cookies (`@supabase/ssr`), verificación de email obligatoria, recuperación de contraseña y vínculo de `scores` al usuario autenticado.
