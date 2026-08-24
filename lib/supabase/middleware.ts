@@ -23,6 +23,11 @@ export async function updateSession(request: NextRequest) {
     },
   );
   // Refreshes the session cookie; do not remove this call.
-  await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user && request.nextUrl.pathname === "/iniciar-sesion") {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
   return supabaseResponse;
 }
