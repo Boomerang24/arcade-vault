@@ -1,6 +1,6 @@
 # SPEC 16 — Checklist de seguridad básico
 
-> **Estado:** Approved
+> **Estado:** Implemented
 > **Depende de:** SPEC 06, SPEC 15
 > **Fecha:** 2026-08-23
 > **Objetivo:** Cerrar los hallazgos de `references/security/security-checklist.md` que son accionables desde el editor — endurecer la policy de INSERT en `scores`, revocar el EXECUTE público de `rls_auto_enable()`, agregar headers de seguridad en Next.js y validar la fortaleza de la contraseña en el registro con una expresión regular antes de llamar a Supabase — y documentar como pasos manuales los tres toggles de configuración de Supabase Auth que no tienen equivalente de código.
