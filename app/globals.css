@@ -275,6 +275,74 @@ a {
 .av-nav .auth-btn {
   margin-left: 16px;
 }
+.av-account {
+  position: relative;
+}
+.av-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: transparent;
+}
+.av-account-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 56;
+  min-width: 200px;
+  background: var(--bg-2);
+  border: 1px solid var(--cyan);
+  box-shadow: 0 0 16px rgba(0, 245, 255, 0.25);
+  padding: 12px;
+}
+.av-account-menu .who {
+  padding: 4px 8px 10px;
+}
+.av-account-menu .who .name {
+  font-size: 10px;
+  color: var(--ink);
+  letter-spacing: 0.08em;
+}
+.av-account-menu .who .email {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  word-break: break-all;
+}
+.av-account-menu .sep {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 0 8px;
+}
+.av-account-menu .item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 8px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+  transition: color 120ms;
+}
+.av-account-menu .item:hover {
+  color: var(--cyan);
+}
+.av-account-menu .item.danger {
+  color: var(--magenta);
+}
+.av-account-menu .item.danger:hover {
+  text-shadow: 0 0 8px rgba(255, 0, 110, 0.65);
+}
+.av-mobile-panel .mobile-logout {
+  text-align: left;
+  padding: 14px 12px;
+  font-family: var(--pixel);
+  font-size: 11px;
+  color: var(--magenta);
+  border-bottom: 1px dashed var(--line-2);
+  cursor: pointer;
+}
 .av-nav .hamburger {
   display: none;
 }
