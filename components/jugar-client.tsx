@@ -31,18 +31,12 @@ export function JugarClient({ game }: { game: Game }) {
   const [engineLevel, setEngineLevel] = useState(1);
   const [paused, setPaused] = useState(false);
   const [over, setOver] = useState(false);
-  const [name, setName] = useState(user ? user.name : "INVITADO");
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const skinStorageKey = `av_skin_${game.id}`;
   const [skin, setSkin] = useState(registered?.skins?.[0]?.id ?? "");
   const level = registered ? engineLevel : Math.floor(score / 2500) + 1;
-  useEffect(() => {
-    // La sesión resuelve async; sincroniza el nombre pre-rellenado cuando llega.
-    if (user) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setName(user.name);
-    }
-  }, [user]);
+  const name = user ? user.name : "INVITADO";
   useEffect(() => {
     if (registered || over || paused) return;
     const t = setInterval(
@@ -98,6 +92,7 @@ export function JugarClient({ game }: { game: Game }) {
     setPaused(false);
     setOver(false);
     setSaved(false);
+    setSaving(false);
     if (registered) engineRef.current?.reset();
   };
   return (
@@ -222,17 +217,15 @@ export function JugarClient({ game }: { game: Game }) {
             {!saved ? (
               user ? (
                 <div className="input-row">
-                  <input
-                    value={name}
-                    onChange={(e) =>
-                      setName(e.target.value.toUpperCase().slice(0, 10))
-                    }
-                    placeholder="TUS INICIALES"
-                  />
+                  <div className="mono" style={{ fontSize: 11 }}>
+                    Guardando como <strong>{name}</strong>
+                  </div>
                   <button
                     className="btn yellow"
+                    disabled={saving}
                     onClick={async () => {
-                      await saveScore({ game: game.id, score, name });
+                      setSaving(true);
+                      await saveScore({ game: game.id, score });
                       setSaved(true);
                     }}
                   >
