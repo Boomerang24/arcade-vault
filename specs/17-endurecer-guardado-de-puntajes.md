@@ -1,6 +1,6 @@
 # SPEC 17 — Endurecer el guardado de puntajes
 
-> **Estado:** Approved
+> **Estado:** Implemented
 > **Depende de:** SPEC 06, SPEC 15, SPEC 16
 > **Fecha:** 2026-08-24
 > **Objetivo:** Cerrar SEC-004 (`references/security/security-audit.md`) atando `scores.name` al `display_name` real del usuario autenticado mediante un trigger en la base, agregando `CHECK` de rango en `score` y de longitud en `name`, y un límite de frecuencia de inserts por usuario y juego — para que ningún `POST` directo a la API de Supabase pueda falsificar el leaderboard ni suplantar el nombre de otro jugador.
