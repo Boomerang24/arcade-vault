@@ -3,7 +3,7 @@ import { createContext, useContext, useEffect, useState } from "react";
 import type { User as SupabaseUser } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 export type User = { id: string; email: string; name: string };
-export type ScoreEntry = { game: string; score: number; name: string };
+export type ScoreEntry = { game: string; score: number };
 type OAuthProvider = "google" | "github";
 type AuthContextValue = {
   user: User | null;
@@ -91,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const supabase = createClient();
     const { error } = await supabase.from("scores").insert({
       game_id: entry.game,
-      name: entry.name,
+      name: user?.name ?? "JUGADOR",
       score: entry.score,
       user_id: user?.id ?? null,
     });
