@@ -33,6 +33,7 @@ export function JugarClient({ game }: { game: Game }) {
   const [over, setOver] = useState(false);
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const skinStorageKey = `av_skin_${game.id}`;
   const [skin, setSkin] = useState(registered?.skins?.[0]?.id ?? "");
   const level = registered ? engineLevel : Math.floor(score / 2500) + 1;
@@ -93,6 +94,7 @@ export function JugarClient({ game }: { game: Game }) {
     setOver(false);
     setSaved(false);
     setSaving(false);
+    setSaveError(null);
     if (registered) engineRef.current?.reset();
   };
   return (
@@ -225,12 +227,28 @@ export function JugarClient({ game }: { game: Game }) {
                     disabled={saving}
                     onClick={async () => {
                       setSaving(true);
-                      await saveScore({ game: game.id, score });
-                      setSaved(true);
+                      setSaveError(null);
+                      try {
+                        await saveScore({ game: game.id, score });
+                        setSaved(true);
+                      } catch {
+                        setSaveError(
+                          "Guardado demasiado frecuente, esperá unos segundos e intentá de nuevo.",
+                        );
+                        setSaving(false);
+                      }
                     }}
                   >
                     GUARDAR PUNTUACIÓN
                   </button>
+                  {saveError && (
+                    <div
+                      className="mono"
+                      style={{ fontSize: 11, color: "var(--magenta)" }}
+                    >
+                      {saveError}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="input-row">
