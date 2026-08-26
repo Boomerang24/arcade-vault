@@ -62,7 +62,9 @@ Tailwind v4 is CSS-first in `app/globals.css` (`@import "tailwindcss"`, no `tail
 - Clients: `lib/supabase/client.ts` (browser) and `lib/supabase/server.ts` (server, `@supabase/ssr`). Env in `.env.local` (see `.env.template`): `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, plus `RESEND_API_KEY` / `CONTACT_TO_EMAIL`.
 - Tables: `games` (`id, title, short, long, cat, cover, color, best, plays`) and `scores` (`id, game_id, name, score, created_at`).
 - Accessors: `lib/games.ts` (`getGames`, `getGame`), `lib/scores.ts` (`getTopScores`, `getAllTopScores` — these map snake_case rows to camelCase), `lib/data.ts` (shared static/config data).
-- Schema changes go through `mcp__supabase__apply_migration` (Supabase MCP server configured in `.mcp.json`), during `/spec-impl` — not from a spec-writing skill.
+- **All development database changes — schema or data — go through `mcp__supabase__apply_migration`** (Supabase MCP server configured in `.mcp.json`), never ad-hoc `mcp__supabase__execute_sql`; reserve `execute_sql` for read-only queries/debugging. This applies any time the DB changes, not only during `/spec-impl`. Migrations must stay replayable so they can later be applied to production.
+- Production is a **separate** Supabase project (ref `jtfxdgnutgzktrejvrjb`) with no MCP access (`.mcp.json` only points at dev). It is bootstrapped and maintained manually — see `docs/deploy-produccion.md` and `supabase/prod/001_bootstrap_prod.sql` (idempotent bootstrap script run by hand in the prod SQL Editor).
+- Read-only SQL access to **prod** goes through the `readonly_pool` Postgres role (created by hand, `bypassrls`, `SELECT` on `public.*` only, no writes/DDL) — for BI/reporting/external integrations, not the app. Connection strings and details in `docs/deploy-produccion.md` §10. Its password is never committed here or in `.env*`.
 - Auth is **not** Supabase Auth: `components/auth-provider.tsx` is a lightweight `localStorage` context (`av_user`) that also exposes `saveScore`. It reads storage only inside `useEffect` to keep server/client markup identical.
 
 ### Games
