@@ -46,6 +46,10 @@ const KEY_TO_DIRECTION: Record<string, Direction> = {
   ArrowLeft: "left",
   ArrowRight: "right",
 };
+// Ventanas de resolución de una jugada, en ms, decrementadas por delta-time
+// acumulado del loop (nunca con setTimeout, para que pause() las congele).
+const MATCH_WINDOW_MS = 250;
+const MISS_WINDOW_MS = 700;
 // Dimensiones de la rejilla por nivel (tope 6x4 en nivel 4+, ver spec).
 function gridDimsForLevel(level: number): { cols: number; rows: number } {
   if (level <= 1) return { cols: 4, rows: 3 };
@@ -362,6 +366,13 @@ export class SinapsisEngine {
   private score = 0;
   private lives = 5;
   private phase: "playing" | "dead" | "gameover" = "playing";
+  // Sondeo: índice del primer nodo revelado mientras se espera el segundo.
+  private firstPick: number | null = null;
+  // Par en resolución (a la espera de que cierre su ventana de confirmación
+  // o castigo), guardado para poder confirmarlo o revertirlo al cerrarla.
+  private resolvePair: [number, number] | null = null;
+  private resolveKind: "match" | "miss" | null = null;
+  private resolveTimer = 0;
   private gameOverNotified = false;
   private rafId: number | null = null;
   private paused = false;
@@ -392,8 +403,20 @@ export class SinapsisEngine {
     this.layout = computeLayout(cols, rows);
     this.board = buildBoard(cols, rows);
     this.cursor = { col: 0, row: 0 };
+    this.firstPick = null;
+    this.resolvePair = null;
+    this.resolveKind = null;
+    this.resolveTimer = 0;
+  }
+  private nodeIndexAt(col: number, row: number): number {
+    return row * this.cols + col;
   }
   private handleKeyDown = (e: KeyboardEvent) => {
+    if (e.code === "Space") {
+      e.preventDefault();
+      this.handleProbe();
+      return;
+    }
     const dir = KEY_TO_DIRECTION[e.code];
     if (!dir) return;
     e.preventDefault();
@@ -410,8 +433,65 @@ export class SinapsisEngine {
       return;
     this.cursor = { col: nextCol, row: nextRow };
   };
-  private update(_dt: number) {
-    // La lógica de sondeo, puntuación y reloj llega en pasos posteriores.
+  // Sondea el nodo bajo el cursor. Ignorado mientras hay una ventana de
+  // resolución activa (el cursor sigue pudiendo moverse, ver handleKeyDown).
+  private handleProbe() {
+    if (this.paused || this.phase === "gameover") return;
+    if (this.resolveTimer > 0) return;
+    const idx = this.nodeIndexAt(this.cursor.col, this.cursor.row);
+    const node = this.board[idx];
+    if (node.state === "matched") return;
+    if (this.firstPick === null) {
+      node.state = "revealed";
+      this.firstPick = idx;
+      return;
+    }
+    if (idx === this.firstPick) return; // mismo nodo: no-op silencioso
+    const first = this.board[this.firstPick];
+    node.state = "revealed";
+    this.resolvePair = [this.firstPick, idx];
+    this.firstPick = null;
+    if (first.glyph === node.glyph) {
+      this.resolveKind = "match";
+      this.resolveTimer = MATCH_WINDOW_MS;
+    } else {
+      this.resolveKind = "miss";
+      this.resolveTimer = MISS_WINDOW_MS;
+      this.lives -= 1;
+      this.phase = "dead";
+    }
+  }
+  // Cierra la ventana de resolución activa: confirma la pareja (`matched`)
+  // o la oculta de nuevo (`hidden`), y dispara game over si ya no quedan
+  // derivaciones.
+  private finalizeResolution() {
+    if (!this.resolvePair) return;
+    const [a, b] = this.resolvePair;
+    if (this.resolveKind === "match") {
+      this.board[a].state = "matched";
+      this.board[b].state = "matched";
+    } else if (this.resolveKind === "miss") {
+      this.board[a].state = "hidden";
+      this.board[b].state = "hidden";
+      if (this.lives <= 0) {
+        this.phase = "gameover";
+        this.triggerGameOver();
+      } else {
+        this.phase = "playing";
+      }
+    }
+    this.resolvePair = null;
+    this.resolveKind = null;
+  }
+  private update(dt: number) {
+    if (this.phase === "gameover") return;
+    if (this.resolveTimer > 0) {
+      this.resolveTimer -= dt;
+      if (this.resolveTimer <= 0) {
+        this.resolveTimer = 0;
+        this.finalizeResolution();
+      }
+    }
   }
   private drawBoard() {
     const ctx = this.ctx;
