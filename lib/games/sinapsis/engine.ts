@@ -50,6 +50,22 @@ const KEY_TO_DIRECTION: Record<string, Direction> = {
 // acumulado del loop (nunca con setTimeout, para que pause() las congele).
 const MATCH_WINDOW_MS = 250;
 const MISS_WINDOW_MS = 700;
+// Presupuesto de reloj de una ronda: nivel 1 = 60s, nivel 2 = 55s, …, piso
+// de 30s a partir del nivel 7+.
+function roundTimeMsForLevel(level: number): number {
+  return Math.max(30, 65 - 5 * level) * 1000;
+}
+// Puntuación por acierto según la longitud de la cadena en curso, tal como
+// la enumera la spec (el salto de +150 a +250 de bonus en la 5ª racha es
+// intencional, no un error de progresión lineal): 1=100, 2=150, 3=200,
+// 4=250, 5+=350. Un fallo reinicia la cadena a 0.
+function scoreForChain(chain: number): number {
+  if (chain <= 1) return 100;
+  if (chain === 2) return 150;
+  if (chain === 3) return 200;
+  if (chain === 4) return 250;
+  return 350;
+}
 // Dimensiones de la rejilla por nivel (tope 6x4 en nivel 4+, ver spec).
 function gridDimsForLevel(level: number): { cols: number; rows: number } {
   if (level <= 1) return { cols: 4, rows: 3 };
@@ -373,6 +389,8 @@ export class SinapsisEngine {
   private resolvePair: [number, number] | null = null;
   private resolveKind: "match" | "miss" | null = null;
   private resolveTimer = 0;
+  private chain = 0;
+  private roundMs = 0;
   private gameOverNotified = false;
   private rafId: number | null = null;
   private paused = false;
@@ -393,6 +411,7 @@ export class SinapsisEngine {
     this.score = 0;
     this.lives = 5;
     this.phase = "playing";
+    this.chain = 0;
     this.gameOverNotified = false;
     this.setupGrid(this.level);
   }
@@ -407,6 +426,7 @@ export class SinapsisEngine {
     this.resolvePair = null;
     this.resolveKind = null;
     this.resolveTimer = 0;
+    this.roundMs = roundTimeMsForLevel(level);
   }
   private nodeIndexAt(col: number, row: number): number {
     return row * this.cols + col;
@@ -458,6 +478,7 @@ export class SinapsisEngine {
       this.resolveKind = "miss";
       this.resolveTimer = MISS_WINDOW_MS;
       this.lives -= 1;
+      this.chain = 0;
       this.phase = "dead";
     }
   }
@@ -470,6 +491,8 @@ export class SinapsisEngine {
     if (this.resolveKind === "match") {
       this.board[a].state = "matched";
       this.board[b].state = "matched";
+      this.chain += 1;
+      this.score += scoreForChain(this.chain);
     } else if (this.resolveKind === "miss") {
       this.board[a].state = "hidden";
       this.board[b].state = "hidden";
@@ -485,6 +508,15 @@ export class SinapsisEngine {
   }
   private update(dt: number) {
     if (this.phase === "gameover") return;
+    // El reloj de ronda corre en "playing" y en "dead" (ventana de castigo);
+    // se congela solo cuando el loop deja de llamar a update() vía pause().
+    this.roundMs -= dt;
+    if (this.roundMs <= 0) {
+      this.roundMs = 0;
+      this.phase = "gameover";
+      this.triggerGameOver();
+      return;
+    }
     if (this.resolveTimer > 0) {
       this.resolveTimer -= dt;
       if (this.resolveTimer <= 0) {
