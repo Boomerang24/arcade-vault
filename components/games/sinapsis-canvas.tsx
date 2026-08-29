@@ -1,11 +1,16 @@
 "use client";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { SinapsisEngine, type EngineStats } from "@/lib/games/sinapsis/engine";
+import {
+  SinapsisEngine,
+  type EngineStats,
+  type SkinName,
+} from "@/lib/games/sinapsis/engine";
 export type SinapsisCanvasHandle = {
   pause: () => void;
   resume: () => void;
   reset: () => void;
   forceGameOver: () => void;
+  setSkin?: (skin: string) => void;
 };
 type Props = {
   onStats: (stats: EngineStats) => void;
@@ -33,6 +38,7 @@ export const SinapsisCanvas = forwardRef<SinapsisCanvasHandle, Props>(
       resume: () => engineRef.current?.resume(),
       reset: () => engineRef.current?.reset(),
       forceGameOver: () => engineRef.current?.forceGameOver(),
+      setSkin: (skin: string) => engineRef.current?.setSkin(skin as SkinName),
     }));
     return <canvas ref={canvasRef} width={800} height={600} />;
   },

@@ -19,17 +19,126 @@ const GRID_AREA_Y = HUD_H;
 const GRID_AREA_H = H - HUD_H;
 const GAP = 16;
 const MARGIN = 24;
-const BACKGROUND = "#050510";
-const NODE_BACK = "#12122a";
-const NODE_BORDER = "#3a3a6a";
-const CURSOR_BORDER = "#00f5ff";
-const HUD_BG = "#0a0a1a";
-const HUD_COLOR = "#f0f0f0";
-const LIFE_ON = "#00ff88";
-const LIFE_OFF = "#2a2a44";
-const DEAD_FLASH_COLOR = "#ef4444";
 const CURSOR_BLINK_MS = 350;
-const CIRCUIT_LINE_COLOR = "rgba(0, 245, 255, 0.18)";
+// ---- skins ----
+// Toda la paleteización vive aquí: cada rol semántico del tablero tiene un
+// color por skin, y los efectos de estilo (glow, scanlines) son campos de la
+// paleta en vez de ramas dispersas por el archivo. `classic` reproduce
+// literal por literal el look original del port.
+export type SkinName = "classic" | "neon" | "retro";
+type Palette = {
+  background: string;
+  nodeBack: string;
+  nodeBorder: string;
+  circuitLine: string;
+  cursor: string;
+  hudBg: string;
+  hudColor: string;
+  lifeOn: string;
+  lifeOff: string;
+  deadFlash: string;
+  timerHigh: string;
+  timerLow: string;
+  // Un color por glifo, en el mismo orden que GLYPH_DRAWERS.
+  glyphs: string[];
+  // Intensidad de glow por elemento (0 = sin sombra).
+  glyphBlurRevealed: number;
+  glyphBlurMatched: number;
+  cursorBlur: number;
+  deathFlashBlur: number;
+  scanlines: boolean;
+};
+export const SKIN_PALETTES: Record<SkinName, Palette> = {
+  classic: {
+    background: "#050510",
+    nodeBack: "#12122a",
+    nodeBorder: "#3a3a6a",
+    circuitLine: "rgba(0, 245, 255, 0.18)",
+    cursor: "#00f5ff",
+    hudBg: "#0a0a1a",
+    hudColor: "#f0f0f0",
+    lifeOn: "#00ff88",
+    lifeOff: "#2a2a44",
+    deadFlash: "#ef4444",
+    timerHigh: "#4ade80",
+    timerLow: "#ef4444",
+    glyphs: [
+      "#00f5ff", // cyan
+      "#ff006e", // magenta
+      "#f5ff00", // yellow
+      "#00ff88", // green
+      "#b026ff", // violeta (variante magenta)
+      "#ffb000", // ámbar (variante yellow)
+      "#00bfff", // azul cielo (variante cyan)
+      "#ff4da6", // rosa (variante magenta)
+      "#adff2f", // lima (variante yellow/green)
+      "#40e0d0", // turquesa (variante cyan/green)
+      "#ff5a3c", // rojo-naranja (variante magenta/yellow)
+      "#c792ea", // lila (variante magenta)
+    ],
+    glyphBlurRevealed: 14,
+    glyphBlurMatched: 18,
+    cursorBlur: 12,
+    deathFlashBlur: 20,
+    scanlines: false,
+  },
+  neon: {
+    background: "#06000f",
+    nodeBack: "#12002b",
+    nodeBorder: "#c800ff",
+    circuitLine: "rgba(255, 0, 110, 0.22)",
+    cursor: "#f5ff00",
+    hudBg: "#0b0018",
+    hudColor: "#00f5ff",
+    lifeOn: "#00ff88",
+    lifeOff: "#2a0a3a",
+    deadFlash: "#ff006e",
+    timerHigh: "#00ff88",
+    timerLow: "#ff006e",
+    glyphs: [
+      "#00f5ff",
+      "#ff006e",
+      "#f5ff00",
+      "#00ff88",
+      "#c800ff",
+      "#ff9d00",
+      "#2b7bff",
+      "#ff2df5",
+      "#b6ff00",
+      "#00ffd0",
+      "#ff3b1f",
+      "#d580ff",
+    ],
+    glyphBlurRevealed: 22,
+    glyphBlurMatched: 26,
+    cursorBlur: 18,
+    deathFlashBlur: 28,
+    scanlines: false,
+  },
+  retro: {
+    background: "#0a0600",
+    nodeBack: "#1a1000",
+    nodeBorder: "#8a5200",
+    circuitLine: "rgba(255, 176, 0, 0.18)",
+    cursor: "#ffd280",
+    hudBg: "#140c00",
+    hudColor: "#ffb000",
+    lifeOn: "#ffb000",
+    lifeOff: "#3d2900",
+    deadFlash: "#ff7b00",
+    timerHigh: "#ffb000",
+    timerLow: "#ff7b00",
+    // Monocromo ámbar: los 12 glifos comparten tono a propósito. Las parejas
+    // ya se distinguen por silueta (requisito de legibilidad de la spec), así
+    // que el color nunca fue el discriminante de la mecánica.
+    glyphs: Array.from({ length: 12 }, () => "#ffb000"),
+    glyphBlurRevealed: 0,
+    glyphBlurMatched: 0,
+    cursorBlur: 0,
+    deathFlashBlur: 0,
+    scanlines: true,
+  },
+};
 type NodeState = "hidden" | "revealed" | "matched";
 type Node = { glyph: number; state: NodeState; col: number; row: number };
 type Cursor = { col: number; row: number };
@@ -337,22 +446,6 @@ const GLYPH_DRAWERS: GlyphDrawer[] = [
   drawStar4,
   drawDoubleBar,
 ];
-// Colores derivados de la paleta del tema (--cyan, --magenta, --yellow,
-// --green) más variantes, uno por glifo, en el mismo orden que GLYPH_DRAWERS.
-const GLYPH_COLORS: string[] = [
-  "#00f5ff", // cyan
-  "#ff006e", // magenta
-  "#f5ff00", // yellow
-  "#00ff88", // green
-  "#b026ff", // violeta (variante magenta)
-  "#ffb000", // ámbar (variante yellow)
-  "#00bfff", // azul cielo (variante cyan)
-  "#ff4da6", // rosa (variante magenta)
-  "#adff2f", // lima (variante yellow/green)
-  "#40e0d0", // turquesa (variante cyan/green)
-  "#ff5a3c", // rojo-naranja (variante magenta/yellow)
-  "#c792ea", // lila (variante magenta)
-];
 function shuffle<T>(items: T[]): T[] {
   const result = items.slice();
   for (let i = result.length - 1; i > 0; i--) {
@@ -389,6 +482,10 @@ export class SinapsisEngine {
   // regenerado solo al cambiar de nivel — evita recalcular geometría fija
   // en cada frame (patrón generalizado por la spec 14).
   private boardCache: HTMLCanvasElement | null = null;
+  private currentSkin: SkinName = "classic";
+  private get palette(): Palette {
+    return SKIN_PALETTES[this.currentSkin];
+  }
   private cursor: Cursor = { col: 0, row: 0 };
   private score = 0;
   private lives = 5;
@@ -449,10 +546,11 @@ export class SinapsisEngine {
       this.boardCache = null;
       return;
     }
-    cctx.fillStyle = BACKGROUND;
+    const p = this.palette;
+    cctx.fillStyle = p.background;
     cctx.fillRect(0, 0, W, H);
     const pad = 10;
-    cctx.strokeStyle = NODE_BORDER;
+    cctx.strokeStyle = p.nodeBorder;
     cctx.lineWidth = 2;
     cctx.strokeRect(
       this.layout.offsetX - pad,
@@ -461,8 +559,8 @@ export class SinapsisEngine {
       this.layout.gridH + pad * 2,
     );
     cctx.save();
-    cctx.fillStyle = NODE_BACK;
-    cctx.strokeStyle = NODE_BORDER;
+    cctx.fillStyle = p.nodeBack;
+    cctx.strokeStyle = p.nodeBorder;
     cctx.lineWidth = 2;
     cctx.beginPath();
     for (const node of this.board) {
@@ -474,7 +572,7 @@ export class SinapsisEngine {
     cctx.restore();
     // Patrón de circuito: cruz + nodo central por celda, un solo trazo.
     cctx.save();
-    cctx.strokeStyle = CIRCUIT_LINE_COLOR;
+    cctx.strokeStyle = p.circuitLine;
     cctx.lineWidth = 1;
     cctx.beginPath();
     for (const node of this.board) {
@@ -607,14 +705,15 @@ export class SinapsisEngine {
   // cambia por glifo dentro del lote, shadowBlur se fija una vez por lote.
   private drawGlyphs() {
     const ctx = this.ctx;
+    const p = this.palette;
     const revealed = this.board.filter((n) => n.state === "revealed");
     const matched = this.board.filter((n) => n.state === "matched");
     if (revealed.length) {
       ctx.save();
-      ctx.shadowBlur = 14;
+      ctx.shadowBlur = p.glyphBlurRevealed;
       for (const node of revealed) {
         const { x, y, size } = cellRect(node, this.layout);
-        const color = GLYPH_COLORS[node.glyph];
+        const color = p.glyphs[node.glyph];
         ctx.shadowColor = color;
         GLYPH_DRAWERS[node.glyph](
           ctx,
@@ -628,11 +727,11 @@ export class SinapsisEngine {
     }
     if (matched.length) {
       ctx.save();
-      ctx.shadowBlur = 18;
+      ctx.shadowBlur = p.glyphBlurMatched;
       ctx.lineWidth = 2;
       for (const node of matched) {
         const { x, y, size } = cellRect(node, this.layout);
-        const color = GLYPH_COLORS[node.glyph];
+        const color = p.glyphs[node.glyph];
         ctx.shadowColor = color;
         ctx.strokeStyle = color;
         GLYPH_DRAWERS[node.glyph](
@@ -657,11 +756,12 @@ export class SinapsisEngine {
     if (!node) return;
     const { x, y, size } = cellRect(node, this.layout);
     const ctx = this.ctx;
+    const p = this.palette;
     ctx.save();
-    ctx.strokeStyle = CURSOR_BORDER;
+    ctx.strokeStyle = p.cursor;
     ctx.lineWidth = 3;
-    ctx.shadowColor = CURSOR_BORDER;
-    ctx.shadowBlur = 12;
+    ctx.shadowColor = p.cursor;
+    ctx.shadowBlur = p.cursorBlur;
     ctx.beginPath();
     ctx.roundRect(x, y, size, size, 8);
     ctx.stroke();
@@ -670,12 +770,13 @@ export class SinapsisEngine {
   // Destello rojo del marco del tablero durante la ventana de castigo.
   private drawDeathFlash() {
     const ctx = this.ctx;
+    const p = this.palette;
     const pad = 10;
     ctx.save();
-    ctx.strokeStyle = DEAD_FLASH_COLOR;
+    ctx.strokeStyle = p.deadFlash;
     ctx.lineWidth = 6;
-    ctx.shadowColor = DEAD_FLASH_COLOR;
-    ctx.shadowBlur = 20;
+    ctx.shadowColor = p.deadFlash;
+    ctx.shadowBlur = p.deathFlashBlur;
     ctx.strokeRect(
       this.layout.offsetX - pad,
       this.layout.offsetY - pad,
@@ -686,16 +787,17 @@ export class SinapsisEngine {
   }
   private drawHUD() {
     const ctx = this.ctx;
+    const p = this.palette;
     ctx.save();
-    ctx.fillStyle = HUD_BG;
+    ctx.fillStyle = p.hudBg;
     ctx.fillRect(0, 0, W, HUD_H);
-    ctx.strokeStyle = NODE_BORDER;
+    ctx.strokeStyle = p.nodeBorder;
     ctx.lineWidth = 1;
     ctx.beginPath();
     ctx.moveTo(0, HUD_H);
     ctx.lineTo(W, HUD_H);
     ctx.stroke();
-    ctx.fillStyle = HUD_COLOR;
+    ctx.fillStyle = p.hudColor;
     ctx.font = '15px "Courier New", monospace';
     ctx.textAlign = "left";
     ctx.fillText(`SCORE  ${this.score}`, 14, 24);
@@ -705,7 +807,7 @@ export class SinapsisEngine {
     const lifeStartX = W - 14 - 4 * 18;
     for (let i = 0; i < 5; i++) {
       ctx.beginPath();
-      ctx.fillStyle = i < this.lives ? LIFE_ON : LIFE_OFF;
+      ctx.fillStyle = i < this.lives ? p.lifeOn : p.lifeOff;
       ctx.arc(lifeStartX - i * 18, 20, 6, 0, Math.PI * 2);
       ctx.fill();
     }
@@ -715,10 +817,10 @@ export class SinapsisEngine {
     const barX = (W - barW) / 2;
     const barY = 42;
     const barH = 8;
-    ctx.strokeStyle = HUD_COLOR;
+    ctx.strokeStyle = p.hudColor;
     ctx.lineWidth = 1;
     ctx.strokeRect(barX, barY, barW, barH);
-    ctx.fillStyle = pct > 0.3 ? "#4ade80" : DEAD_FLASH_COLOR;
+    ctx.fillStyle = pct > 0.3 ? p.timerHigh : p.timerLow;
     ctx.fillRect(barX, barY, barW * pct, barH);
     ctx.restore();
   }
@@ -727,13 +829,36 @@ export class SinapsisEngine {
     if (this.boardCache) {
       ctx.drawImage(this.boardCache, 0, 0);
     } else {
-      ctx.fillStyle = BACKGROUND;
+      ctx.fillStyle = this.palette.background;
       ctx.fillRect(0, 0, W, H);
     }
     this.drawGlyphs();
     this.drawCursor(now);
     if (this.phase === "dead") this.drawDeathFlash();
+    // Las scanlines van sobre el tablero pero debajo del HUD, para que
+    // score/capa/derivaciones y la barra de tiempo sigan legibles.
+    if (this.palette.scanlines) this.drawScanlines();
     this.drawHUD();
+  }
+  // Buffer offscreen con las scanlines pre-renderizadas: se dibuja una sola
+  // vez y luego cada frame solo hace drawImage(). El patrón no depende de la
+  // skin, así que se cachea para toda la vida del engine.
+  private scanlinesBuffer: HTMLCanvasElement | null = null;
+  private drawScanlines() {
+    if (!this.scanlinesBuffer) {
+      const buffer = document.createElement("canvas");
+      buffer.width = W;
+      buffer.height = H;
+      const bctx = buffer.getContext("2d");
+      if (bctx) {
+        bctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+        for (let y = 0; y < H; y += 3) {
+          bctx.fillRect(0, y, W, 1);
+        }
+      }
+      this.scanlinesBuffer = buffer;
+    }
+    this.ctx.drawImage(this.scanlinesBuffer, 0, 0);
   }
   private triggerGameOver() {
     if (this.gameOverNotified) return;
@@ -778,6 +903,15 @@ export class SinapsisEngine {
     if (this.rafId === null) {
       this.rafId = requestAnimationFrame(this.loop);
     }
+  }
+  // Cambia la skin activa. Regenera el cache del tablero (que tiene el fondo,
+  // el marco, los dorsos y el patrón de circuito horneados) y redibuja
+  // sincrónicamente, para que el cambio se vea al instante también en pausa.
+  setSkin(skin: SkinName): void {
+    if (!(skin in SKIN_PALETTES) || skin === this.currentSkin) return;
+    this.currentSkin = skin;
+    this.buildBoardCache();
+    this.draw(performance.now());
   }
   forceGameOver(): void {
     if (this.phase === "gameover") return;

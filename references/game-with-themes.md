@@ -13,6 +13,49 @@ El agente trabaja **un juego por corrida** — nunca recorre el catálogo comple
 | arkanoid   | ✅      | ✅   | ✅    | —                | 2026-08-15  |
 | snake      | ✅      | ✅   | ✅    | —                | 2026-08-15  |
 | frogger    | ✅      | ✅   | ✅    | —                | 2026-08-17  |
+| sinapsis   | ✅      | ✅   | ✅    | —                | 2026-08-28  |
+
+## sinapsis
+
+**Técnica:** paleta por rol semántico (`SKIN_PALETTES: Record<SkinName, Palette>`) en `lib/games/sinapsis/engine.ts`. Juego 100% procedural (los 12 glifos se dibujan con primitivas de canvas, no hay `public/games/sinapsis/`), así que cada literal pasó a ser un campo de la paleta, incluidos los **12 colores de glifo** (`palette.glyphs`, mismo orden que `GLYPH_DRAWERS`). El motor guarda `private currentSkin` + getter `palette`; `drawGlyphs`, `drawCursor`, `drawDeathFlash`, `drawHUD` y el fallback de fondo de `draw()` leen de ahí. La intensidad del glow no es una rama `if (skin === "neon")` sino cuatro campos numéricos de la paleta (`glyphBlurRevealed`, `glyphBlurMatched`, `cursorBlur`, `deathFlashBlur`), porque `classic` **ya tenía glow propio** (14/18/12/20) y había que conservarlo exacto. `setSkin()` regenera `boardCache` —el canvas offscreen donde están horneados fondo, marco, dorsos y patrón de circuito— y luego redibuja sincrónicamente (verificado en pausa). Selector compartido vía `GAME_REGISTRY.sinapsis.skins`.
+
+| Rol         | classic                | neon                   | retro                  |
+| ----------- | ---------------------- | ---------------------- | ---------------------- |
+| background  | `#050510`              | `#06000f`              | `#0a0600`              |
+| nodeBack    | `#12122a`              | `#12002b`              | `#1a1000`              |
+| nodeBorder  | `#3a3a6a`              | `#c800ff`              | `#8a5200`              |
+| circuitLine | `rgba(0,245,255,0.18)` | `rgba(255,0,110,0.22)` | `rgba(255,176,0,0.18)` |
+| cursor      | `#00f5ff`              | `#f5ff00`              | `#ffd280`              |
+| hudBg       | `#0a0a1a`              | `#0b0018`              | `#140c00`              |
+| hudColor    | `#f0f0f0`              | `#00f5ff`              | `#ffb000`              |
+| lifeOn      | `#00ff88`              | `#00ff88`              | `#ffb000`              |
+| lifeOff     | `#2a2a44`              | `#2a0a3a`              | `#3d2900`              |
+| deadFlash   | `#ef4444`              | `#ff006e`              | `#ff7b00`              |
+| timerHigh   | `#4ade80`              | `#00ff88`              | `#ffb000`              |
+| timerLow    | `#ef4444`              | `#ff006e`              | `#ff7b00`              |
+| glifo 1     | `#00f5ff`              | `#00f5ff`              | `#ffb000`              |
+| glifo 2     | `#ff006e`              | `#ff006e`              | `#ffb000`              |
+| glifo 3     | `#f5ff00`              | `#f5ff00`              | `#ffb000`              |
+| glifo 4     | `#00ff88`              | `#00ff88`              | `#ffb000`              |
+| glifo 5     | `#b026ff`              | `#c800ff`              | `#ffb000`              |
+| glifo 6     | `#ffb000`              | `#ff9d00`              | `#ffb000`              |
+| glifo 7     | `#00bfff`              | `#2b7bff`              | `#ffb000`              |
+| glifo 8     | `#ff4da6`              | `#ff2df5`              | `#ffb000`              |
+| glifo 9     | `#adff2f`              | `#b6ff00`              | `#ffb000`              |
+| glifo 10    | `#40e0d0`              | `#00ffd0`              | `#ffb000`              |
+| glifo 11    | `#ff5a3c`              | `#ff3b1f`              | `#ffb000`              |
+| glifo 12    | `#c792ea`              | `#d580ff`              | `#ffb000`              |
+| glow        | 14 / 18 / 12 / 20      | 22 / 26 / 18 / 28      | 0 / 0 / 0 / 0          |
+
+(la fila `glow` es `glyphBlurRevealed / glyphBlurMatched / cursorBlur / deathFlashBlur`)
+
+**Estilo por skin:**
+
+- `classic`: literales originales exactos (fondo `#050510`, dorsos `#12122a` con borde `#3a3a6a`, circuito cian al 18%, cursor cian con blur 12, flash de castigo `#ef4444` con blur 20, HUD `#f0f0f0` sobre `#0a0a1a`, barra de tiempo `#4ade80`/`#ef4444`, los 12 glifos con sus tonos originales). Sin scanlines.
+- `neon`: dorsos violeta sobre negro púrpura, patrón de circuito magenta, cursor amarillo (contrasta contra el violeta del marco, que en esta skin ocupa el color cian que usaba el cursor), HUD cian y glifos con los tonos saturados alineados a los tokens del sitio (`--cyan`, `--magenta`, `--yellow`, `--green`, `#c800ff`). Todo el glow sube ~50%.
+- `retro`: monocromo ámbar CRT (`#ffb000`) sobre negro cálido, sin glow, con scanlines horizontales (`rgba(0,0,0,0.22)` cada 3px, buffer offscreen cacheado) dibujadas sobre el tablero pero **debajo** del HUD, para que score/capa/derivaciones y la barra de tiempo sigan legibles.
+
+**Notas:** en `retro` los **12 glifos comparten el mismo ámbar a propósito**. La spec del juego exige que las formas sean distinguibles por silueta y no solo por color, así que el color nunca fue el discriminante de la mecánica de emparejado; un ramp de luminancia por glifo (como el de `arkanoid`) habría sido peor aquí, porque insinuaría una relación entre glifos de tono parecido que no existe. El cursor es la única excepción monocroma de `retro` (`#ffd280`, ámbar claro) para que el marco activo se distinga del borde de los dorsos. Se eligió ámbar y no verde fósforo porque `neon` ya usa `#00ff88` en vidas y barra de tiempo. Cero cambios de mecánica: ventanas de resolución (`MATCH_WINDOW_MS`/`MISS_WINDOW_MS`), reloj de ronda, dimensiones de rejilla, `cellRect`, cadena de puntuación y navegación del cursor quedaron intactos — el glow no altera nada porque el cursor se mueve por índice de celda, no por píxel. No se añadió ningún asset a `public/games/`.
 
 ## frogger
 
