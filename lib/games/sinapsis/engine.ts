@@ -23,6 +23,13 @@ const BACKGROUND = "#050510";
 const NODE_BACK = "#12122a";
 const NODE_BORDER = "#3a3a6a";
 const CURSOR_BORDER = "#00f5ff";
+const HUD_BG = "#0a0a1a";
+const HUD_COLOR = "#f0f0f0";
+const LIFE_ON = "#00ff88";
+const LIFE_OFF = "#2a2a44";
+const DEAD_FLASH_COLOR = "#ef4444";
+const CURSOR_BLINK_MS = 350;
+const CIRCUIT_LINE_COLOR = "rgba(0, 245, 255, 0.18)";
 type NodeState = "hidden" | "revealed" | "matched";
 type Node = { glyph: number; state: NodeState; col: number; row: number };
 type Cursor = { col: number; row: number };
@@ -378,6 +385,10 @@ export class SinapsisEngine {
   private rows = 3;
   private board: Node[] = [];
   private layout: Layout = computeLayout(4, 3);
+  // Fondo estático de la rejilla (marco + dorsos con patrón de circuito),
+  // regenerado solo al cambiar de nivel — evita recalcular geometría fija
+  // en cada frame (patrón generalizado por la spec 14).
+  private boardCache: HTMLCanvasElement | null = null;
   private cursor: Cursor = { col: 0, row: 0 };
   private score = 0;
   private lives = 5;
@@ -427,6 +438,59 @@ export class SinapsisEngine {
     this.resolveKind = null;
     this.resolveTimer = 0;
     this.roundMs = roundTimeMsForLevel(level);
+    this.buildBoardCache();
+  }
+  private buildBoardCache() {
+    const cache = document.createElement("canvas");
+    cache.width = W;
+    cache.height = H;
+    const cctx = cache.getContext("2d");
+    if (!cctx) {
+      this.boardCache = null;
+      return;
+    }
+    cctx.fillStyle = BACKGROUND;
+    cctx.fillRect(0, 0, W, H);
+    const pad = 10;
+    cctx.strokeStyle = NODE_BORDER;
+    cctx.lineWidth = 2;
+    cctx.strokeRect(
+      this.layout.offsetX - pad,
+      this.layout.offsetY - pad,
+      this.layout.gridW + pad * 2,
+      this.layout.gridH + pad * 2,
+    );
+    cctx.save();
+    cctx.fillStyle = NODE_BACK;
+    cctx.strokeStyle = NODE_BORDER;
+    cctx.lineWidth = 2;
+    cctx.beginPath();
+    for (const node of this.board) {
+      const { x, y, size } = cellRect(node, this.layout);
+      cctx.roundRect(x, y, size, size, 8);
+    }
+    cctx.fill();
+    cctx.stroke();
+    cctx.restore();
+    // Patrón de circuito: cruz + nodo central por celda, un solo trazo.
+    cctx.save();
+    cctx.strokeStyle = CIRCUIT_LINE_COLOR;
+    cctx.lineWidth = 1;
+    cctx.beginPath();
+    for (const node of this.board) {
+      const { x, y, size } = cellRect(node, this.layout);
+      const cx = x + size / 2;
+      const cy = y + size / 2;
+      cctx.moveTo(cx, y + size * 0.15);
+      cctx.lineTo(cx, y + size * 0.85);
+      cctx.moveTo(x + size * 0.15, cy);
+      cctx.lineTo(x + size * 0.85, cy);
+      cctx.moveTo(cx + size * 0.12, cy);
+      cctx.arc(cx, cy, size * 0.12, 0, Math.PI * 2);
+    }
+    cctx.stroke();
+    cctx.restore();
+    this.boardCache = cache;
   }
   private nodeIndexAt(col: number, row: number): number {
     return row * this.cols + col;
@@ -538,53 +602,138 @@ export class SinapsisEngine {
       }
     }
   }
-  private drawBoard() {
+  // Glifos de nodos revelados/confirmados, en dos lotes (uno por estado) con
+  // un solo save()/restore() cada uno en vez de por nodo — solo shadowColor
+  // cambia por glifo dentro del lote, shadowBlur se fija una vez por lote.
+  private drawGlyphs() {
     const ctx = this.ctx;
-    ctx.save();
-    ctx.strokeStyle = NODE_BORDER;
-    ctx.lineWidth = 2;
-    ctx.fillStyle = NODE_BACK;
-    ctx.beginPath();
-    for (const node of this.board) {
-      const { x, y, size } = cellRect(node, this.layout);
-      ctx.roundRect(x, y, size, size, 8);
-    }
-    ctx.fill();
-    ctx.stroke();
-    ctx.restore();
-    for (const node of this.board) {
-      if (node.state === "hidden") continue;
-      const { x, y, size } = cellRect(node, this.layout);
-      const glyphSize = size * 0.55;
-      GLYPH_DRAWERS[node.glyph](
-        ctx,
-        x + size / 2,
-        y + size / 2,
-        glyphSize,
-        GLYPH_COLORS[node.glyph],
-      );
-    }
-    const cursorNode = this.board.find(
-      (n) => n.col === this.cursor.col && n.row === this.cursor.row,
-    );
-    if (cursorNode) {
-      const { x, y, size } = cellRect(cursorNode, this.layout);
+    const revealed = this.board.filter((n) => n.state === "revealed");
+    const matched = this.board.filter((n) => n.state === "matched");
+    if (revealed.length) {
       ctx.save();
-      ctx.strokeStyle = CURSOR_BORDER;
-      ctx.lineWidth = 3;
-      ctx.shadowColor = CURSOR_BORDER;
-      ctx.shadowBlur = 12;
-      ctx.beginPath();
-      ctx.roundRect(x, y, size, size, 8);
-      ctx.stroke();
+      ctx.shadowBlur = 14;
+      for (const node of revealed) {
+        const { x, y, size } = cellRect(node, this.layout);
+        const color = GLYPH_COLORS[node.glyph];
+        ctx.shadowColor = color;
+        GLYPH_DRAWERS[node.glyph](
+          ctx,
+          x + size / 2,
+          y + size / 2,
+          size * 0.55,
+          color,
+        );
+      }
+      ctx.restore();
+    }
+    if (matched.length) {
+      ctx.save();
+      ctx.shadowBlur = 18;
+      ctx.lineWidth = 2;
+      for (const node of matched) {
+        const { x, y, size } = cellRect(node, this.layout);
+        const color = GLYPH_COLORS[node.glyph];
+        ctx.shadowColor = color;
+        ctx.strokeStyle = color;
+        GLYPH_DRAWERS[node.glyph](
+          ctx,
+          x + size / 2,
+          y + size / 2,
+          size * 0.55,
+          color,
+        );
+        ctx.beginPath();
+        ctx.roundRect(x, y, size, size, 8);
+        ctx.stroke();
+      }
       ctx.restore();
     }
   }
-  private draw() {
+  // Marco parpadeante sobre la celda activa (blink por reloj real, no por
+  // frame, para que el ritmo no dependa del framerate).
+  private drawCursor(now: number) {
+    if (Math.floor(now / CURSOR_BLINK_MS) % 2 !== 0) return;
+    const node = this.board[this.nodeIndexAt(this.cursor.col, this.cursor.row)];
+    if (!node) return;
+    const { x, y, size } = cellRect(node, this.layout);
     const ctx = this.ctx;
-    ctx.fillStyle = BACKGROUND;
-    ctx.fillRect(0, 0, W, H);
-    this.drawBoard();
+    ctx.save();
+    ctx.strokeStyle = CURSOR_BORDER;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = CURSOR_BORDER;
+    ctx.shadowBlur = 12;
+    ctx.beginPath();
+    ctx.roundRect(x, y, size, size, 8);
+    ctx.stroke();
+    ctx.restore();
+  }
+  // Destello rojo del marco del tablero durante la ventana de castigo.
+  private drawDeathFlash() {
+    const ctx = this.ctx;
+    const pad = 10;
+    ctx.save();
+    ctx.strokeStyle = DEAD_FLASH_COLOR;
+    ctx.lineWidth = 6;
+    ctx.shadowColor = DEAD_FLASH_COLOR;
+    ctx.shadowBlur = 20;
+    ctx.strokeRect(
+      this.layout.offsetX - pad,
+      this.layout.offsetY - pad,
+      this.layout.gridW + pad * 2,
+      this.layout.gridH + pad * 2,
+    );
+    ctx.restore();
+  }
+  private drawHUD() {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = HUD_BG;
+    ctx.fillRect(0, 0, W, HUD_H);
+    ctx.strokeStyle = NODE_BORDER;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, HUD_H);
+    ctx.lineTo(W, HUD_H);
+    ctx.stroke();
+    ctx.fillStyle = HUD_COLOR;
+    ctx.font = '15px "Courier New", monospace';
+    ctx.textAlign = "left";
+    ctx.fillText(`SCORE  ${this.score}`, 14, 24);
+    ctx.textAlign = "center";
+    ctx.fillText(`CAPA ${this.level}`, W / 2, 24);
+    ctx.textAlign = "right";
+    const lifeStartX = W - 14 - 4 * 18;
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath();
+      ctx.fillStyle = i < this.lives ? LIFE_ON : LIFE_OFF;
+      ctx.arc(lifeStartX - i * 18, 20, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const total = roundTimeMsForLevel(this.level);
+    const pct = Math.max(0, Math.min(1, this.roundMs / total));
+    const barW = 220;
+    const barX = (W - barW) / 2;
+    const barY = 42;
+    const barH = 8;
+    ctx.strokeStyle = HUD_COLOR;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barW, barH);
+    ctx.fillStyle = pct > 0.3 ? "#4ade80" : DEAD_FLASH_COLOR;
+    ctx.fillRect(barX, barY, barW * pct, barH);
+    ctx.restore();
+  }
+  private draw(now: number) {
+    const ctx = this.ctx;
+    if (this.boardCache) {
+      ctx.drawImage(this.boardCache, 0, 0);
+    } else {
+      ctx.fillStyle = BACKGROUND;
+      ctx.fillRect(0, 0, W, H);
+    }
+    this.drawGlyphs();
+    this.drawCursor(now);
+    if (this.phase === "dead") this.drawDeathFlash();
+    this.drawHUD();
   }
   private triggerGameOver() {
     if (this.gameOverNotified) return;
@@ -595,7 +744,7 @@ export class SinapsisEngine {
     const dt = this.lastFrameTime ? now - this.lastFrameTime : 16;
     this.lastFrameTime = now;
     this.update(dt);
-    this.draw();
+    this.draw(now);
     this.callbacks.onStats({
       score: this.score,
       lives: this.lives,
@@ -634,7 +783,7 @@ export class SinapsisEngine {
     if (this.phase === "gameover") return;
     this.phase = "gameover";
     this.triggerGameOver();
-    this.draw();
+    this.draw(performance.now());
     this.callbacks.onStats({
       score: this.score,
       lives: this.lives,
