@@ -493,6 +493,9 @@ export class SinapsisEngine {
       this.board[b].state = "matched";
       this.chain += 1;
       this.score += scoreForChain(this.chain);
+      if (this.board.every((n) => n.state === "matched")) {
+        this.advanceLevel();
+      }
     } else if (this.resolveKind === "miss") {
       this.board[a].state = "hidden";
       this.board[b].state = "hidden";
@@ -505,6 +508,16 @@ export class SinapsisEngine {
     }
     this.resolvePair = null;
     this.resolveKind = null;
+  }
+  // Al resolverse todas las sinapsis de la corteza: bonus de capa (segundos
+  // restantes × 10 × nivel actual, antes de subirlo), luego sube el nivel y
+  // regenera la rejilla (setupGrid recarga el reloj). Las derivaciones no
+  // se tocan: se arrastran de una capa a otra durante toda la partida.
+  private advanceLevel() {
+    const secondsLeft = this.roundMs / 1000;
+    this.score += Math.round(secondsLeft * 10 * this.level);
+    this.level += 1;
+    this.setupGrid(this.level);
   }
   private update(dt: number) {
     if (this.phase === "gameover") return;
