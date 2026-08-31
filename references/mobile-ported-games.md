@@ -14,6 +14,7 @@ El agente trabaja **un juego por corrida** — nunca recorre el catálogo comple
 | snake      | ↑ ↓ ← → | —                | ✅            | 2026-08-15  |
 | frogger    | ↑ ↓ ← → | —                | ✅            | 2026-08-17  |
 | sinapsis   | ↑ ↓ ← → | SONDEAR (Space)  | ✅            | 2026-08-28  |
+| sifon      | ↑ ↓ ← → | DISPARAR (Space) | ✅            | 2026-08-31  |
 
 ## asteroides
 
@@ -56,3 +57,17 @@ El agente trabaja **un juego por corrida** — nunca recorre el catálogo comple
 - **`Space` se procesa aun en pausa/gameover a nivel de `handleKeyDown`** (el early-return de `paused`/`gameover` solo cubre las flechas); `handleProbe()` es quien filtra internamente. Comportamiento idéntico a mantener la tecla física, no introducido por esta corrida.
 - Canvas único 800×600 sin clases propias — cae bajo `.crt-screen canvas { max-width: 100%; height: auto }` (`app/globals.css:1091`), sin reglas nuevas bajo `pointer: coarse`.
 - Cambios de esta corrida: `touchActions` en `GAME_REGISTRY.sinapsis` y la fila en `TOUCH_DIRECTIONS`. Nada más.
+
+## sifon
+
+**Mapeo:** ←/→ rotan el sifón de forma **continua** (el motor lee `this.keys["ArrowLeft"]/["ArrowRight"]` cada frame en `update()`, `lib/games/sifon/engine.ts:407-408`, no en el `keydown`), ↑ dispara, ↓ intercambia la burbuja cargada con la siguiente, DISPARAR (`Space`) dispara. `Space` y `ArrowUp` son sinónimos exactos en el motor (`engine.ts:370`).
+**Notas:**
+
+- **Las 4 flechas quedan habilitadas.** ↑ es redundante con el botón DISPARAR pero el motor sí lo escucha, así que se deja activo en vez de deshabilitarlo (el D-pad es un bloque fijo de 4 flechas; ocultarlo o inhabilitarlo sería quitar una tecla que el teclado físico sí tiene).
+- **El swap (`ArrowDown`) no puede ser un segundo botón de acción.** `TouchAction.code` está tipado como el literal `"Space"` (`lib/games/registry.ts:53`) y ampliar ese tipo queda fuera del alcance de este agente; el swap ya es accesible desde ↓ del D-pad, así que no se pierde ninguna acción.
+- **Rotación continua vs. auto-repeat:** ←/→ no dependen del repeat de 300/80ms de `TouchControls` — basta con mantener el dedo abajo, porque el motor rota mientras la tecla esté marcada como presionada. `keyup` sintético de `TouchControls` la libera correctamente.
+- **Disparo/swap solo en `firstPress`** (`engine.ts:369`): el auto-repeat de `TouchControls` reenvía `keydown` sin `keyup` intermedio, así que mantener presionado ↑/↓/DISPARAR **no** encadena disparos ni swaps repetidos — hay que soltar y volver a tocar, igual que con la tecla física.
+- **HUD ya existía** desde la implementación original: `drawPanels()` (`engine.ts:785`, invocado por frame desde `draw()` en `engine.ts:938`) dibuja PUNTUACIÓN, NIVEL, VIDAS, SIGUIENTE y el manómetro de PRESIÓN en los paneles laterales. Verificado, no asumido — el motor no se tocó en esta corrida.
+- **Vidas como 3 puntos (círculos llenos/vacíos), no como texto `VIDAS: N`.** Misma excepción consciente que `asteroides`/`frogger`/`sinapsis`: el texto fue una decisión de la spec 12 para motores que _no_ tenían HUD.
+- Canvas único 800×600 sin clases propias — cae bajo `.crt-screen canvas { max-width: 100%; height: auto }` (`app/globals.css:1091`), sin reglas nuevas bajo `pointer: coarse`.
+- Cambios de esta corrida: `touchActions` en `GAME_REGISTRY.sifon` y la fila en `TOUCH_DIRECTIONS`. Nada más.
