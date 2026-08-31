@@ -14,6 +14,50 @@ El agente trabaja **un juego por corrida** — nunca recorre el catálogo comple
 | snake      | ✅      | ✅   | ✅    | —                | 2026-08-15  |
 | frogger    | ✅      | ✅   | ✅    | —                | 2026-08-17  |
 | sinapsis   | ✅      | ✅   | ✅    | —                | 2026-08-28  |
+| sifon      | ✅      | ✅   | ✅    | —                | 2026-08-31  |
+
+## sifon
+
+**Técnica:** paleta por rol semántico (`SKIN_PALETTES: Record<SkinName, Palette>`) en `lib/games/sifon/engine.ts`. Juego 100% procedural (burbujas con gradiente radial, sin `public/games/sifon/`), así que cada literal pasó a campo de paleta, incluidos los 4 colores de burbuja (`palette.bubbles`, indexado por `BubbleColor`). El motor guarda `private currentSkin` + getter `palette`; `renderMassCache`, `drawBubbleAt`, `drawWell`, `drawDangerLine`, `drawPress`, `drawNozzle`, `drawPanels`, `drawOverlay` y `draw()` leen de ahí. El glow no es una rama `if (skin === "neon")` sino tres campos numéricos (`bubbleBlur`, `nozzleBlur`, `overlayBlur`), porque `classic` **ya tenía glow propio** (8/12/18) y había que conservarlo exacto; lo mismo con `bubbleCore`/`bubbleSpecular` (centro del gradiente y punto de brillo). El flash de purga se deriva del hex `purgeFlash` con `withAlpha()`, conservando la rampa `0.25 · deadTimer/DEAD_SECONDS`. `setSkin()` marca `massDirty` (para regenerar el canvas offscreen donde están horneadas las burbujas asentadas) y redibuja sincrónicamente, reponiendo el overlay "PAUSA" si estaba pausado. `BUBBLE_HEX` se mantiene como export histórico apuntando a `SKIN_PALETTES.classic.bubbles`. Selector compartido vía `GAME_REGISTRY.sifon.skins`.
+
+| Rol             | classic                | neon                   | retro                    |
+| --------------- | ---------------------- | ---------------------- | ------------------------ |
+| bg              | `#050510`              | `#06000f`              | `#0a0600`                |
+| poolWall        | `#3a3a6a`              | `#c800ff`              | `#8a5200`                |
+| poolFill        | `rgba(0,245,255,0.04)` | `rgba(255,0,110,0.05)` | `rgba(255,176,0,0.04)`   |
+| press           | `#5a5a7a`              | `#7a00b0`              | `#8a5200`                |
+| pressEdge       | `#9a9ac0`              | `#f5ff00`              | `#ffb000`                |
+| pressBolt       | `#1a1a2e`              | `#12002b`              | `#1a1000`                |
+| danger          | `#ef4444`              | `#ff006e`              | `#ff7b00`                |
+| dangerAlt       | `#1a1000`              | `#12002b`              | `#1a1000`                |
+| nozzle          | `#00f5ff`              | `#00f5ff`              | `#ffb000`                |
+| aimGuide        | `rgba(0,245,255,0.6)`  | `rgba(0,245,255,0.7)`  | `rgba(255,176,0,0.6)`    |
+| panelBg         | `#0a0a1a`              | `#0b0018`              | `#140c00`                |
+| panelLine       | `rgba(0,245,255,0.15)` | `rgba(200,0,255,0.25)` | `rgba(255,176,0,0.15)`   |
+| hud             | `#f0f0f0`              | `#00f5ff`              | `#ffb000`                |
+| hudDim          | `rgba(240,240,240,.5)` | `rgba(0,245,255,0.55)` | `rgba(255,176,0,0.5)`    |
+| gaugeFrame      | `#3a3a6a`              | `#c800ff`              | `#8a5200`                |
+| gaugeFill       | `#f5ff00`              | `#f5ff00`              | `#ffb000`                |
+| overlayTitle    | `#00f5ff`              | `#ff006e`              | `#ffb000`                |
+| overlaySub      | `rgba(240,240,240,.7)` | `rgba(0,245,255,0.75)` | `rgba(255,176,0,0.7)`    |
+| purgeFlash      | `#ef4444`              | `#ff006e`              | `#ff7b00`                |
+| burbuja cyan    | `#00f5ff`              | `#00f5ff`              | `#ffe9b0`                |
+| burbuja magenta | `#ff006e`              | `#ff006e`              | `#ffb000`                |
+| burbuja yellow  | `#f5ff00`              | `#f5ff00`              | `#d18800`                |
+| burbuja green   | `#00ff88`              | `#00ff88`              | `#7a4400`                |
+| bubbleCore      | `#ffffff`              | `#ffffff`              | `rgba(255,232,190,0.6)`  |
+| bubbleSpecular  | `rgba(255,255,255,.5)` | `rgba(255,255,255,.6)` | `rgba(255,232,190,0.35)` |
+| glow            | 8 / 12 / 18            | 16 / 20 / 26           | 0 / 0 / 0                |
+
+(la fila `glow` es `bubbleBlur / nozzleBlur / overlayBlur`)
+
+**Estilo por skin:**
+
+- `classic`: literales originales exactos (fondo `#050510`, paredes del pozo `#3a3a6a`, prensa gris azulada con borde `#9a9ac0`, línea de peligro `#ef4444`, boquilla cian con blur 12, HUD `#f0f0f0`/`rgba(240,240,240,0.5)`, manómetro amarillo, overlay cian con blur 18, burbujas con los 4 tokens neón del sitio y núcleo blanco). Sin scanlines.
+- `neon`: pozo y manómetro violeta (`#c800ff`), prensa púrpura con borde amarillo, línea de peligro magenta, HUD cian, overlay magenta; todo el glow sube ~2x (burbujas 16, boquilla 20, overlay 26). Los 4 colores de burbuja **no cambian** respecto de `classic` porque ya son exactamente los tokens del sitio (`--cyan`, `--magenta`, `--yellow`, `--green`): lo que cambia es el cromo alrededor y la intensidad del glow.
+- `retro`: monocromo ámbar CRT sobre negro cálido, sin glow, con scanlines horizontales (`rgba(0,0,0,0.22)` cada 3px, buffer offscreen cacheado) dibujadas sobre el pozo pero **debajo** de los paneles de HUD y del overlay, para que puntuación/nivel/vidas/manómetro y el texto de fin de partida sigan legibles.
+
+**Notas:** en `retro` las 4 burbujas **no pueden ser monocromas** como en `sinapsis` o `frogger`: aquí el color _es_ la mecánica (racimos de 3 del mismo color) y todas las burbujas comparten la misma silueta circular, así que no hay forma alternativa de discriminarlas. Se usó un ramp de 4 intensidades de ámbar bien separadas (`#ffe9b0` > `#ffb000` > `#d18800` > `#7a4400`), como el ramp de `dim` de `arkanoid`; el gap entre las dos más oscuras se amplió tras la pasada de navegador porque `#c47a00`/`#8f5a00` se confundían sumados a las scanlines. Además el núcleo del gradiente (`bubbleCore`) y el brillo especular pasan a ámbar translúcido en `retro`, porque el blanco puro del original aplanaba las cuatro intensidades. Cero cambios de mecánica: `SPEED`, `ROT_SPEED`, `MAX_ANGLE`, `GRAVITY`, geometría hexagonal (`D`/`R`/`ROW_H`), umbral de presión, línea de peligro y puntuación quedaron intactos — el glow no altera hitboxes porque las colisiones son círculo-círculo por centro de celda, no por píxel dibujado. No se añadió ningún asset a `public/games/`.
 
 ## sinapsis
 

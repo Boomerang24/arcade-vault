@@ -42,36 +42,149 @@ const MAX_SUBSTEP = R; // el proyectil nunca avanza más de D/2 sin re-evaluar c
 // ---- reglas de nivel ----
 const pressureThreshold = (level: number) => Math.max(8 - (level - 1), 4);
 const initialRows = (level: number) => Math.min(5 + (level - 1), 8);
-// ---- colores (sistema visual del sitio; @skin-designer los paletiza luego) ----
-const COLORS = {
-  bg: "#050510",
-  poolWall: "#3a3a6a",
-  poolFill: "rgba(0,245,255,0.04)",
-  press: "#5a5a7a",
-  pressEdge: "#9a9ac0",
-  pressBolt: "#1a1a2e",
-  danger: "#ef4444",
-  dangerAlt: "#1a1000",
-  nozzle: "#00f5ff",
-  panelBg: "#0a0a1a",
-  panelLine: "rgba(0,245,255,0.15)",
-  hud: "#f0f0f0",
-  hudDim: "rgba(240,240,240,0.5)",
-  gaugeFrame: "#3a3a6a",
-  gaugeFill: "#f5ff00",
-  overlayTitle: "#00f5ff",
-  overlaySub: "rgba(240,240,240,0.7)",
-  purgeFlash: "#ef4444",
-} as const;
 // 4 colores de burbuja tomados del sistema neón del sitio.
 export type BubbleColor = "cyan" | "magenta" | "yellow" | "green";
 const ALL_COLORS: BubbleColor[] = ["cyan", "magenta", "yellow", "green"];
-export const BUBBLE_HEX: Record<BubbleColor, string> = {
-  cyan: "#00f5ff",
-  magenta: "#ff006e",
-  yellow: "#f5ff00",
-  green: "#00ff88",
+// ---- skins ----
+// Todo literal de color del motor vive en una paleta por skin. Los efectos de
+// estilo (intensidad de glow, scanlines) también son campos de la paleta, no
+// ramas `if (skin === ...)` esparcidas por el archivo: `classic` ya tenía glow
+// propio (8/12/18) y había que conservarlo exacto.
+export type SkinName = "classic" | "neon" | "retro";
+export type Palette = {
+  bg: string;
+  poolWall: string;
+  poolFill: string;
+  press: string;
+  pressEdge: string;
+  pressBolt: string;
+  danger: string;
+  dangerAlt: string;
+  nozzle: string;
+  aimGuide: string;
+  panelBg: string;
+  panelLine: string;
+  hud: string;
+  hudDim: string;
+  gaugeFrame: string;
+  gaugeFill: string;
+  overlayTitle: string;
+  overlaySub: string;
+  purgeFlash: string; // hex; el alpha se deriva con withAlpha()
+  bubbles: Record<BubbleColor, string>;
+  bubbleCore: string; // centro del gradiente radial de la burbuja
+  bubbleSpecular: string; // punto de brillo
+  bubbleBlur: number;
+  nozzleBlur: number;
+  overlayBlur: number;
+  scanlines: boolean;
 };
+export const SKIN_PALETTES: Record<SkinName, Palette> = {
+  classic: {
+    bg: "#050510",
+    poolWall: "#3a3a6a",
+    poolFill: "rgba(0,245,255,0.04)",
+    press: "#5a5a7a",
+    pressEdge: "#9a9ac0",
+    pressBolt: "#1a1a2e",
+    danger: "#ef4444",
+    dangerAlt: "#1a1000",
+    nozzle: "#00f5ff",
+    aimGuide: "rgba(0,245,255,0.6)",
+    panelBg: "#0a0a1a",
+    panelLine: "rgba(0,245,255,0.15)",
+    hud: "#f0f0f0",
+    hudDim: "rgba(240,240,240,0.5)",
+    gaugeFrame: "#3a3a6a",
+    gaugeFill: "#f5ff00",
+    overlayTitle: "#00f5ff",
+    overlaySub: "rgba(240,240,240,0.7)",
+    purgeFlash: "#ef4444",
+    bubbles: {
+      cyan: "#00f5ff",
+      magenta: "#ff006e",
+      yellow: "#f5ff00",
+      green: "#00ff88",
+    },
+    bubbleCore: "#ffffff",
+    bubbleSpecular: "rgba(255,255,255,0.5)",
+    bubbleBlur: 8,
+    nozzleBlur: 12,
+    overlayBlur: 18,
+    scanlines: false,
+  },
+  neon: {
+    bg: "#06000f",
+    poolWall: "#c800ff",
+    poolFill: "rgba(255,0,110,0.05)",
+    press: "#7a00b0",
+    pressEdge: "#f5ff00",
+    pressBolt: "#12002b",
+    danger: "#ff006e",
+    dangerAlt: "#12002b",
+    nozzle: "#00f5ff",
+    aimGuide: "rgba(0,245,255,0.7)",
+    panelBg: "#0b0018",
+    panelLine: "rgba(200,0,255,0.25)",
+    hud: "#00f5ff",
+    hudDim: "rgba(0,245,255,0.55)",
+    gaugeFrame: "#c800ff",
+    gaugeFill: "#f5ff00",
+    overlayTitle: "#ff006e",
+    overlaySub: "rgba(0,245,255,0.75)",
+    purgeFlash: "#ff006e",
+    bubbles: {
+      cyan: "#00f5ff",
+      magenta: "#ff006e",
+      yellow: "#f5ff00",
+      green: "#00ff88",
+    },
+    bubbleCore: "#ffffff",
+    bubbleSpecular: "rgba(255,255,255,0.6)",
+    bubbleBlur: 16,
+    nozzleBlur: 20,
+    overlayBlur: 26,
+    scanlines: false,
+  },
+  retro: {
+    bg: "#0a0600",
+    poolWall: "#8a5200",
+    poolFill: "rgba(255,176,0,0.04)",
+    press: "#8a5200",
+    pressEdge: "#ffb000",
+    pressBolt: "#1a1000",
+    danger: "#ff7b00",
+    dangerAlt: "#1a1000",
+    nozzle: "#ffb000",
+    aimGuide: "rgba(255,176,0,0.6)",
+    panelBg: "#140c00",
+    panelLine: "rgba(255,176,0,0.15)",
+    hud: "#ffb000",
+    hudDim: "rgba(255,176,0,0.5)",
+    gaugeFrame: "#8a5200",
+    gaugeFill: "#ffb000",
+    overlayTitle: "#ffb000",
+    overlaySub: "rgba(255,176,0,0.7)",
+    purgeFlash: "#ff7b00",
+    // Ramp de 4 intensidades de ámbar: el color ES la mecánica (emparejado de
+    // 3), así que `retro` no puede ser monocromo puro como en otros juegos.
+    bubbles: {
+      cyan: "#ffe9b0",
+      magenta: "#ffb000",
+      yellow: "#d18800",
+      green: "#7a4400",
+    },
+    bubbleCore: "rgba(255,232,190,0.6)",
+    bubbleSpecular: "rgba(255,232,190,0.35)",
+    bubbleBlur: 0,
+    nozzleBlur: 0,
+    overlayBlur: 0,
+    scanlines: true,
+  },
+};
+// Paleta de burbujas de `classic`, conservada como export histórico.
+export const BUBBLE_HEX: Record<BubbleColor, string> =
+  SKIN_PALETTES.classic.bubbles;
 // Activar para verificar la geometría: pinta cada centro de celda y valida el
 // ida y vuelta pixel→celda→pixel. Nunca queda activo en producción.
 const DEBUG_GRID = false;
@@ -134,6 +247,10 @@ function shade(hex: string, f: number): string {
   const b = Math.round((n & 255) * (1 - f));
   return `rgb(${r},${g},${b})`;
 }
+function withAlpha(hex: string, a: number): string {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+}
 const key = (r: number, c: number) => `${r},${c}`;
 const parseKey = (k: string): { r: number; c: number } => {
   const [r, c] = k.split(",").map(Number);
@@ -154,6 +271,10 @@ export class SifonEngine {
   private lives = 3;
   private level = 1;
   private state: "playing" | "dead" | "gameover" = "playing";
+  private currentSkin: SkinName = "classic";
+  private get palette(): Palette {
+    return SKIN_PALETTES[this.currentSkin];
+  }
   // Borde inferior de la prensa; arranca en POOL_TOP y baja de a ROW_H.
   private techoY = POOL_TOP;
   private pressure = 0;
@@ -492,6 +613,7 @@ export class SifonEngine {
   // ---- render ----
   private renderMassCache() {
     const ctx = this.massCtx;
+    const pal = this.palette;
     ctx.clearRect(0, 0, W, H);
     const byColor = new Map<BubbleColor, Array<{ x: number; y: number }>>();
     for (const [k, color] of this.mass) {
@@ -502,10 +624,10 @@ export class SifonEngine {
     }
     // Cuerpos: un save/shadowBlur por color, no por burbuja.
     for (const [color, pts] of byColor) {
-      const hex = BUBBLE_HEX[color];
+      const hex = pal.bubbles[color];
       ctx.save();
       ctx.shadowColor = hex;
-      ctx.shadowBlur = 8;
+      ctx.shadowBlur = pal.bubbleBlur;
       for (const pt of pts) {
         const g = ctx.createRadialGradient(
           pt.x - 5,
@@ -515,7 +637,7 @@ export class SifonEngine {
           pt.y,
           R,
         );
-        g.addColorStop(0, "#ffffff");
+        g.addColorStop(0, pal.bubbleCore);
         g.addColorStop(0.25, hex);
         g.addColorStop(1, shade(hex, 0.55));
         ctx.fillStyle = g;
@@ -527,7 +649,7 @@ export class SifonEngine {
     }
     // Brillos especulares: pasada única sin sombra.
     ctx.save();
-    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.fillStyle = pal.bubbleSpecular;
     for (const pts of byColor.values()) {
       for (const pt of pts) {
         ctx.beginPath();
@@ -540,12 +662,13 @@ export class SifonEngine {
   }
   private drawBubbleAt(x: number, y: number, color: BubbleColor) {
     const ctx = this.ctx;
-    const hex = BUBBLE_HEX[color];
+    const pal = this.palette;
+    const hex = pal.bubbles[color];
     ctx.save();
     ctx.shadowColor = hex;
-    ctx.shadowBlur = 8;
+    ctx.shadowBlur = pal.bubbleBlur;
     const g = ctx.createRadialGradient(x - 5, y - 5, 2, x, y, R);
-    g.addColorStop(0, "#ffffff");
+    g.addColorStop(0, pal.bubbleCore);
     g.addColorStop(0.25, hex);
     g.addColorStop(1, shade(hex, 0.55));
     ctx.fillStyle = g;
@@ -553,7 +676,7 @@ export class SifonEngine {
     ctx.arc(x, y, R - 1, 0, Math.PI * 2);
     ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "rgba(255,255,255,0.5)";
+    ctx.fillStyle = pal.bubbleSpecular;
     ctx.beginPath();
     ctx.arc(x - 5, y - 6, 3.5, 0, Math.PI * 2);
     ctx.fill();
@@ -561,14 +684,14 @@ export class SifonEngine {
   }
   private drawWell() {
     const ctx = this.ctx;
-    ctx.fillStyle = COLORS.poolFill;
+    ctx.fillStyle = this.palette.poolFill;
     ctx.fillRect(
       POOL_LEFT,
       POOL_TOP,
       POOL_RIGHT - POOL_LEFT,
       POOL_BOTTOM - POOL_TOP,
     );
-    ctx.strokeStyle = COLORS.poolWall;
+    ctx.strokeStyle = this.palette.poolWall;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(POOL_LEFT, POOL_TOP);
@@ -583,9 +706,9 @@ export class SifonEngine {
     ctx.beginPath();
     ctx.rect(POOL_LEFT, DANGER_Y - 5, POOL_RIGHT - POOL_LEFT, 10);
     ctx.clip();
-    ctx.fillStyle = COLORS.dangerAlt;
+    ctx.fillStyle = this.palette.dangerAlt;
     ctx.fillRect(POOL_LEFT, DANGER_Y - 5, POOL_RIGHT - POOL_LEFT, 10);
-    ctx.fillStyle = COLORS.danger;
+    ctx.fillStyle = this.palette.danger;
     for (let x = POOL_LEFT - 20; x < POOL_RIGHT; x += 20) {
       ctx.beginPath();
       ctx.moveTo(x, DANGER_Y + 5);
@@ -599,19 +722,20 @@ export class SifonEngine {
   }
   private drawPress() {
     const ctx = this.ctx;
+    const pal = this.palette;
     const top = Math.max(0, this.techoY - 26);
     const grad = ctx.createLinearGradient(0, top, 0, this.techoY);
-    grad.addColorStop(0, COLORS.pressBolt);
-    grad.addColorStop(1, COLORS.press);
+    grad.addColorStop(0, pal.pressBolt);
+    grad.addColorStop(1, pal.press);
     ctx.fillStyle = grad;
     ctx.fillRect(POOL_LEFT, top, POOL_RIGHT - POOL_LEFT, this.techoY - top);
-    ctx.strokeStyle = COLORS.pressEdge;
+    ctx.strokeStyle = pal.pressEdge;
     ctx.lineWidth = 3;
     ctx.beginPath();
     ctx.moveTo(POOL_LEFT, this.techoY);
     ctx.lineTo(POOL_RIGHT, this.techoY);
     ctx.stroke();
-    ctx.fillStyle = COLORS.pressBolt;
+    ctx.fillStyle = pal.pressBolt;
     for (let x = POOL_LEFT + 20; x < POOL_RIGHT; x += 48) {
       ctx.beginPath();
       ctx.arc(x, this.techoY - 13, 3, 0, Math.PI * 2);
@@ -620,10 +744,11 @@ export class SifonEngine {
   }
   private drawNozzle() {
     const ctx = this.ctx;
+    const pal = this.palette;
     // guía de puntería: rayo punteado corto, sin predicción de rebotes.
     ctx.save();
     ctx.setLineDash([4, 6]);
-    ctx.strokeStyle = "rgba(0,245,255,0.6)";
+    ctx.strokeStyle = pal.aimGuide;
     ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(NOZZLE_X, MUZZLE_Y);
@@ -643,9 +768,9 @@ export class SifonEngine {
     ctx.save();
     ctx.translate(NOZZLE_X, NOZZLE_Y);
     ctx.rotate(this.angle);
-    ctx.shadowColor = COLORS.nozzle;
-    ctx.shadowBlur = 12;
-    ctx.fillStyle = COLORS.nozzle;
+    ctx.shadowColor = pal.nozzle;
+    ctx.shadowBlur = pal.nozzleBlur;
+    ctx.fillStyle = pal.nozzle;
     ctx.beginPath();
     ctx.moveTo(-16, 24);
     ctx.lineTo(16, 24);
@@ -659,31 +784,32 @@ export class SifonEngine {
   }
   private drawPanels() {
     const ctx = this.ctx;
-    ctx.fillStyle = COLORS.panelBg;
+    const pal = this.palette;
+    ctx.fillStyle = pal.panelBg;
     ctx.fillRect(0, 0, POOL_LEFT, H);
     ctx.fillRect(POOL_RIGHT, 0, W - POOL_RIGHT, H);
     ctx.fillRect(0, 0, W, POOL_TOP);
-    ctx.strokeStyle = COLORS.panelLine;
+    ctx.strokeStyle = pal.panelLine;
     ctx.lineWidth = 1;
     ctx.strokeRect(0.5, 0.5, POOL_LEFT - 1, H - 1);
     ctx.strokeRect(POOL_RIGHT + 0.5, 0.5, W - POOL_RIGHT - 1, H - 1);
     // franja superior
-    ctx.fillStyle = COLORS.hud;
+    ctx.fillStyle = pal.hud;
     ctx.font = "13px monospace";
     ctx.textAlign = "left";
     ctx.fillText("TANQUE // EMBOTELLADORA", 14, 24);
     ctx.textAlign = "right";
-    ctx.fillStyle = COLORS.hudDim;
+    ctx.fillStyle = pal.hudDim;
     const fila = Math.round((this.techoY - POOL_TOP) / ROW_H);
     ctx.fillText(`PRENSA · FILA ${fila}`, W - 14, 24);
     // panel izquierdo
     ctx.textAlign = "left";
-    ctx.fillStyle = COLORS.hudDim;
+    ctx.fillStyle = pal.hudDim;
     ctx.font = "11px monospace";
     ctx.fillText("PUNTUACIÓN", 16, 90);
     ctx.fillText("NIVEL", 16, 150);
     ctx.fillText("VIDAS", 16, 210);
-    ctx.fillStyle = COLORS.hud;
+    ctx.fillStyle = pal.hud;
     ctx.font = "20px monospace";
     ctx.fillText(String(this.score), 16, 114);
     ctx.fillText(String(this.level), 16, 174);
@@ -691,16 +817,16 @@ export class SifonEngine {
       ctx.beginPath();
       ctx.arc(24 + i * 24, 230, 8, 0, Math.PI * 2);
       if (i < this.lives) {
-        ctx.fillStyle = COLORS.nozzle;
+        ctx.fillStyle = pal.nozzle;
         ctx.fill();
       } else {
-        ctx.strokeStyle = COLORS.hudDim;
+        ctx.strokeStyle = pal.hudDim;
         ctx.lineWidth = 1.5;
         ctx.stroke();
       }
     }
     // panel derecho: cola + manómetro
-    ctx.fillStyle = COLORS.hudDim;
+    ctx.fillStyle = pal.hudDim;
     ctx.font = "11px monospace";
     ctx.fillText("SIGUIENTE", POOL_RIGHT + 16, 90);
     for (let i = 0; i < 2; i++) {
@@ -710,16 +836,16 @@ export class SifonEngine {
     const gy = 250;
     const gw = 20;
     const gh = 260;
-    ctx.fillStyle = COLORS.hudDim;
+    ctx.fillStyle = pal.hudDim;
     ctx.fillText("PRESIÓN", POOL_RIGHT + 16, gy - 12);
-    ctx.strokeStyle = COLORS.gaugeFrame;
+    ctx.strokeStyle = pal.gaugeFrame;
     ctx.lineWidth = 2;
     ctx.strokeRect(gx, gy, gw, gh);
     const frac = Math.max(
       0,
       Math.min(1, this.pressure / pressureThreshold(this.level)),
     );
-    ctx.fillStyle = COLORS.gaugeFill;
+    ctx.fillStyle = pal.gaugeFill;
     ctx.fillRect(
       gx + 2,
       gy + gh - gh * frac + 2,
@@ -729,16 +855,17 @@ export class SifonEngine {
   }
   private drawOverlay(title: string, sub: string) {
     const ctx = this.ctx;
+    const pal = this.palette;
     ctx.save();
     ctx.textAlign = "center";
-    ctx.shadowColor = COLORS.overlayTitle;
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = COLORS.overlayTitle;
+    ctx.shadowColor = pal.overlayTitle;
+    ctx.shadowBlur = pal.overlayBlur;
+    ctx.fillStyle = pal.overlayTitle;
     ctx.font = "bold 44px monospace";
     ctx.fillText(title, W / 2, H / 2 - 14);
     ctx.shadowBlur = 0;
     ctx.font = "16px monospace";
-    ctx.fillStyle = COLORS.overlaySub;
+    ctx.fillStyle = pal.overlaySub;
     ctx.fillText(sub, W / 2, H / 2 + 24);
     ctx.restore();
   }
@@ -768,9 +895,28 @@ export class SifonEngine {
     );
     ctx.restore();
   }
+  // Buffer offscreen con las scanlines pre-renderizadas: se dibuja una sola
+  // vez y luego cada frame solo hace drawImage(). El patrón no depende de la
+  // skin, así que se cachea para toda la vida del engine.
+  private scanlinesBuffer: HTMLCanvasElement | null = null;
+  private drawScanlines() {
+    if (!this.scanlinesBuffer) {
+      const buffer = document.createElement("canvas");
+      buffer.width = W;
+      buffer.height = H;
+      const bctx = buffer.getContext("2d");
+      if (bctx) {
+        bctx.fillStyle = "rgba(0,0,0,0.22)";
+        for (let y = 0; y < H; y += 3) bctx.fillRect(0, y, W, 1);
+      }
+      this.scanlinesBuffer = buffer;
+    }
+    this.ctx.drawImage(this.scanlinesBuffer, 0, 0);
+  }
   private draw() {
     const ctx = this.ctx;
-    ctx.fillStyle = COLORS.bg;
+    const pal = this.palette;
+    ctx.fillStyle = pal.bg;
     ctx.fillRect(0, 0, W, H);
     this.drawWell();
     if (this.massDirty) this.renderMassCache();
@@ -786,10 +932,16 @@ export class SifonEngine {
     this.drawDangerLine();
     this.drawPress();
     this.drawNozzle();
+    // Las scanlines van sobre el pozo pero debajo de los paneles y del
+    // overlay, para que el HUD y el texto de fin de partida sigan legibles.
+    if (pal.scanlines) this.drawScanlines();
     this.drawPanels();
     if (this.state === "dead") {
       ctx.save();
-      ctx.fillStyle = `rgba(239,68,68,${0.25 * Math.max(0, this.deadTimer / DEAD_SECONDS)})`;
+      ctx.fillStyle = withAlpha(
+        pal.purgeFlash,
+        0.25 * Math.max(0, this.deadTimer / DEAD_SECONDS),
+      );
       ctx.fillRect(
         POOL_LEFT,
         POOL_TOP,
@@ -844,6 +996,16 @@ export class SifonEngine {
       this.lastTime = null;
       this.rafId = requestAnimationFrame(this.loop);
     }
+  }
+  // Cambia la skin activa. Invalida el cache de la masa (donde están horneadas
+  // las burbujas ya asentadas) y redibuja sincrónicamente, para que el cambio
+  // se vea al instante también en pausa.
+  setSkin(skin: SkinName): void {
+    if (!(skin in SKIN_PALETTES) || skin === this.currentSkin) return;
+    this.currentSkin = skin;
+    this.massDirty = true;
+    this.draw();
+    if (this.paused) this.drawOverlay("PAUSA", "");
   }
   forceGameOver(): void {
     if (this.state === "gameover") return;

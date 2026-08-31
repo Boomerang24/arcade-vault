@@ -116,6 +116,11 @@ export const GAME_REGISTRY: Record<string, RegisteredGame> = {
   },
   sifon: {
     Canvas: SifonCanvas,
+    skins: [
+      { id: "classic", label: "Classic" },
+      { id: "neon", label: "Neon" },
+      { id: "retro", label: "Retro" },
+    ],
   },
 };
 export function getRegisteredGame(id: string): RegisteredGame | undefined {
