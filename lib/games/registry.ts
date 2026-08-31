@@ -23,6 +23,10 @@ import {
   SinapsisCanvas,
   type SinapsisCanvasHandle,
 } from "@/components/games/sinapsis-canvas";
+import {
+  SifonCanvas,
+  type SifonCanvasHandle,
+} from "@/components/games/sifon-canvas";
 export type EngineStats = {
   score: number;
   lives: number;
@@ -110,6 +114,9 @@ export const GAME_REGISTRY: Record<string, RegisteredGame> = {
     ],
     touchActions: [{ code: "Space", label: "SONDEAR" }],
   },
+  sifon: {
+    Canvas: SifonCanvas,
+  },
 };
 export function getRegisteredGame(id: string): RegisteredGame | undefined {
   return GAME_REGISTRY[id];
@@ -123,4 +130,5 @@ export type {
   SnakeCanvasHandle,
   FroggerCanvasHandle,
   SinapsisCanvasHandle,
+  SifonCanvasHandle,
 };
