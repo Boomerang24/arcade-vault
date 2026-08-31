@@ -19,6 +19,10 @@ import {
   FroggerCanvas,
   type FroggerCanvasHandle,
 } from "@/components/games/frogger-canvas";
+import {
+  SinapsisCanvas,
+  type SinapsisCanvasHandle,
+} from "@/components/games/sinapsis-canvas";
 export type EngineStats = {
   score: number;
   lives: number;
@@ -97,6 +101,15 @@ export const GAME_REGISTRY: Record<string, RegisteredGame> = {
       { id: "retro", label: "Retro" },
     ],
   },
+  sinapsis: {
+    Canvas: SinapsisCanvas,
+    skins: [
+      { id: "classic", label: "Classic" },
+      { id: "neon", label: "Neon" },
+      { id: "retro", label: "Retro" },
+    ],
+    touchActions: [{ code: "Space", label: "SONDEAR" }],
+  },
 };
 export function getRegisteredGame(id: string): RegisteredGame | undefined {
   return GAME_REGISTRY[id];
@@ -109,4 +122,5 @@ export type {
   ArkanoidCanvasHandle,
   SnakeCanvasHandle,
   FroggerCanvasHandle,
+  SinapsisCanvasHandle,
 };

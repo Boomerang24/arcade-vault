@@ -1,6 +1,6 @@
 # 15 — Juego: SINAPSIS (Modo Clásico)
 
-**Estado:** Draft
+**Estado:** Implemented
 **Depende de:** SPEC 05, SPEC 06, SPEC 07
 **Fecha:** 2026-08-20
 

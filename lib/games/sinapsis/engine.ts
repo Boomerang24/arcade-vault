@@ -1,0 +1,933 @@
+// Motor de SINAPSIS escrito desde cero (juego original de game-jam, sin
+// game.js de referencia ni assets binarios — ver
+// specs/game-jam/sinapsis/15-sinapsis-base.md). Modo clásico: rejilla de
+// nodos de memoria/concentración navegada por teclado, con reloj por ronda.
+export type EngineStats = {
+  score: number;
+  lives: number;
+  level: number;
+  state: "playing" | "dead" | "gameover";
+};
+export type EngineCallbacks = {
+  onStats: (stats: EngineStats) => void;
+  onGameOver: (finalScore: number) => void;
+};
+const W = 800;
+const H = 600;
+const HUD_H = 64;
+const GRID_AREA_Y = HUD_H;
+const GRID_AREA_H = H - HUD_H;
+const GAP = 16;
+const MARGIN = 24;
+const CURSOR_BLINK_MS = 350;
+// ---- skins ----
+// Toda la paleteización vive aquí: cada rol semántico del tablero tiene un
+// color por skin, y los efectos de estilo (glow, scanlines) son campos de la
+// paleta en vez de ramas dispersas por el archivo. `classic` reproduce
+// literal por literal el look original del port.
+export type SkinName = "classic" | "neon" | "retro";
+type Palette = {
+  background: string;
+  nodeBack: string;
+  nodeBorder: string;
+  circuitLine: string;
+  cursor: string;
+  hudBg: string;
+  hudColor: string;
+  lifeOn: string;
+  lifeOff: string;
+  deadFlash: string;
+  timerHigh: string;
+  timerLow: string;
+  // Un color por glifo, en el mismo orden que GLYPH_DRAWERS.
+  glyphs: string[];
+  // Intensidad de glow por elemento (0 = sin sombra).
+  glyphBlurRevealed: number;
+  glyphBlurMatched: number;
+  cursorBlur: number;
+  deathFlashBlur: number;
+  scanlines: boolean;
+};
+export const SKIN_PALETTES: Record<SkinName, Palette> = {
+  classic: {
+    background: "#050510",
+    nodeBack: "#12122a",
+    nodeBorder: "#3a3a6a",
+    circuitLine: "rgba(0, 245, 255, 0.18)",
+    cursor: "#00f5ff",
+    hudBg: "#0a0a1a",
+    hudColor: "#f0f0f0",
+    lifeOn: "#00ff88",
+    lifeOff: "#2a2a44",
+    deadFlash: "#ef4444",
+    timerHigh: "#4ade80",
+    timerLow: "#ef4444",
+    glyphs: [
+      "#00f5ff", // cyan
+      "#ff006e", // magenta
+      "#f5ff00", // yellow
+      "#00ff88", // green
+      "#b026ff", // violeta (variante magenta)
+      "#ffb000", // ámbar (variante yellow)
+      "#00bfff", // azul cielo (variante cyan)
+      "#ff4da6", // rosa (variante magenta)
+      "#adff2f", // lima (variante yellow/green)
+      "#40e0d0", // turquesa (variante cyan/green)
+      "#ff5a3c", // rojo-naranja (variante magenta/yellow)
+      "#c792ea", // lila (variante magenta)
+    ],
+    glyphBlurRevealed: 14,
+    glyphBlurMatched: 18,
+    cursorBlur: 12,
+    deathFlashBlur: 20,
+    scanlines: false,
+  },
+  neon: {
+    background: "#06000f",
+    nodeBack: "#12002b",
+    nodeBorder: "#c800ff",
+    circuitLine: "rgba(255, 0, 110, 0.22)",
+    cursor: "#f5ff00",
+    hudBg: "#0b0018",
+    hudColor: "#00f5ff",
+    lifeOn: "#00ff88",
+    lifeOff: "#2a0a3a",
+    deadFlash: "#ff006e",
+    timerHigh: "#00ff88",
+    timerLow: "#ff006e",
+    glyphs: [
+      "#00f5ff",
+      "#ff006e",
+      "#f5ff00",
+      "#00ff88",
+      "#c800ff",
+      "#ff9d00",
+      "#2b7bff",
+      "#ff2df5",
+      "#b6ff00",
+      "#00ffd0",
+      "#ff3b1f",
+      "#d580ff",
+    ],
+    glyphBlurRevealed: 22,
+    glyphBlurMatched: 26,
+    cursorBlur: 18,
+    deathFlashBlur: 28,
+    scanlines: false,
+  },
+  retro: {
+    background: "#0a0600",
+    nodeBack: "#1a1000",
+    nodeBorder: "#8a5200",
+    circuitLine: "rgba(255, 176, 0, 0.18)",
+    cursor: "#ffd280",
+    hudBg: "#140c00",
+    hudColor: "#ffb000",
+    lifeOn: "#ffb000",
+    lifeOff: "#3d2900",
+    deadFlash: "#ff7b00",
+    timerHigh: "#ffb000",
+    timerLow: "#ff7b00",
+    // Monocromo ámbar: los 12 glifos comparten tono a propósito. Las parejas
+    // ya se distinguen por silueta (requisito de legibilidad de la spec), así
+    // que el color nunca fue el discriminante de la mecánica.
+    glyphs: Array.from({ length: 12 }, () => "#ffb000"),
+    glyphBlurRevealed: 0,
+    glyphBlurMatched: 0,
+    cursorBlur: 0,
+    deathFlashBlur: 0,
+    scanlines: true,
+  },
+};
+type NodeState = "hidden" | "revealed" | "matched";
+type Node = { glyph: number; state: NodeState; col: number; row: number };
+type Cursor = { col: number; row: number };
+type Layout = {
+  cellSize: number;
+  gridW: number;
+  gridH: number;
+  offsetX: number;
+  offsetY: number;
+};
+type Direction = "up" | "down" | "left" | "right";
+const DIRECTION_DELTA: Record<Direction, { dc: number; dr: number }> = {
+  up: { dc: 0, dr: -1 },
+  down: { dc: 0, dr: 1 },
+  left: { dc: -1, dr: 0 },
+  right: { dc: 1, dr: 0 },
+};
+const KEY_TO_DIRECTION: Record<string, Direction> = {
+  ArrowUp: "up",
+  ArrowDown: "down",
+  ArrowLeft: "left",
+  ArrowRight: "right",
+};
+// Ventanas de resolución de una jugada, en ms, decrementadas por delta-time
+// acumulado del loop (nunca con setTimeout, para que pause() las congele).
+const MATCH_WINDOW_MS = 250;
+const MISS_WINDOW_MS = 700;
+// Presupuesto de reloj de una ronda: nivel 1 = 60s, nivel 2 = 55s, …, piso
+// de 30s a partir del nivel 7+.
+function roundTimeMsForLevel(level: number): number {
+  return Math.max(30, 65 - 5 * level) * 1000;
+}
+// Puntuación por acierto según la longitud de la cadena en curso, tal como
+// la enumera la spec (el salto de +150 a +250 de bonus en la 5ª racha es
+// intencional, no un error de progresión lineal): 1=100, 2=150, 3=200,
+// 4=250, 5+=350. Un fallo reinicia la cadena a 0.
+function scoreForChain(chain: number): number {
+  if (chain <= 1) return 100;
+  if (chain === 2) return 150;
+  if (chain === 3) return 200;
+  if (chain === 4) return 250;
+  return 350;
+}
+// Dimensiones de la rejilla por nivel (tope 6x4 en nivel 4+, ver spec).
+function gridDimsForLevel(level: number): { cols: number; rows: number } {
+  if (level <= 1) return { cols: 4, rows: 3 };
+  if (level === 2) return { cols: 4, rows: 4 };
+  if (level === 3) return { cols: 6, rows: 3 };
+  return { cols: 6, rows: 4 };
+}
+// Calcula el tamaño de carta que hace caber una rejilla cols x rows,
+// centrada en el área bajo el HUD, con gap fijo y margen mínimo de 24px.
+function computeLayout(cols: number, rows: number): Layout {
+  const availW = W - 2 * MARGIN;
+  const availH = GRID_AREA_H - 2 * MARGIN;
+  const cellW = (availW - (cols - 1) * GAP) / cols;
+  const cellH = (availH - (rows - 1) * GAP) / rows;
+  const cellSize = Math.floor(Math.min(cellW, cellH));
+  const gridW = cols * cellSize + (cols - 1) * GAP;
+  const gridH = rows * cellSize + (rows - 1) * GAP;
+  const offsetX = (W - gridW) / 2;
+  const offsetY = GRID_AREA_Y + (GRID_AREA_H - gridH) / 2;
+  return { cellSize, gridW, gridH, offsetX, offsetY };
+}
+function cellRect(node: { col: number; row: number }, layout: Layout) {
+  return {
+    x: layout.offsetX + node.col * (layout.cellSize + GAP),
+    y: layout.offsetY + node.row * (layout.cellSize + GAP),
+    size: layout.cellSize,
+  };
+}
+// ---- glifos ----
+// 12 formas dibujadas con primitivas de canvas, distinguibles por silueta
+// (no solo por color) — requisito de legibilidad de la spec. Cada función es
+// pura: recibe el contexto, el centro, un tamaño de referencia y su color.
+type GlyphDrawer = (
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) => void;
+function drawCircle(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+  ctx.fill();
+}
+function drawRing(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = size * 0.28;
+  ctx.beginPath();
+  ctx.arc(cx, cy, size * 0.32, 0, Math.PI * 2);
+  ctx.stroke();
+}
+function drawTriangle(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
+  const r = size / 2;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx + r * 0.87, cy + r * 0.5);
+  ctx.lineTo(cx - r * 0.87, cy + r * 0.5);
+  ctx.closePath();
+  ctx.fill();
+}
+function drawSquare(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
+  const s = size * 0.78;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(cx - s / 2, cy - s / 2, s, s, s * 0.15);
+  ctx.fill();
+}
+function drawDiamond(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
+  const r = size / 2;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - r);
+  ctx.lineTo(cx + r, cy);
+  ctx.lineTo(cx, cy + r);
+  ctx.lineTo(cx - r, cy);
+  ctx.closePath();
+  ctx.fill();
+}
+function drawCross(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
+  const arm = size * 0.62;
+  const thick = size * 0.22;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.rect(cx - thick / 2, cy - arm / 2, thick, arm);
+  ctx.rect(cx - arm / 2, cy - thick / 2, arm, thick);
+  ctx.fill();
+}
+function drawSaltire(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
+  const r = size * 0.42;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = size * 0.2;
+  ctx.lineCap = "round";
+  ctx.beginPath();
+  ctx.moveTo(cx - r, cy - r);
+  ctx.lineTo(cx + r, cy + r);
+  ctx.moveTo(cx + r, cy - r);
+  ctx.lineTo(cx - r, cy + r);
+  ctx.stroke();
+}
+function drawHexagon(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
+  const r = size / 2;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let i = 0; i < 6; i++) {
+    const angle = (Math.PI / 3) * i - Math.PI / 2;
+    const px = cx + r * Math.cos(angle);
+    const py = cy + r * Math.sin(angle);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+function drawBolt(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
+  const pts: [number, number][] = [
+    [0.1, -0.5],
+    [-0.15, 0.05],
+    [0.05, 0.05],
+    [-0.1, 0.5],
+    [0.25, -0.05],
+    [0.05, -0.05],
+  ];
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  pts.forEach(([px, py], i) => {
+    const x = cx + px * size;
+    const y = cy + py * size;
+    if (i === 0) ctx.moveTo(x, y);
+    else ctx.lineTo(x, y);
+  });
+  ctx.closePath();
+  ctx.fill();
+}
+function drawCrescent(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
+  const r = size / 2;
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.closePath();
+  ctx.clip();
+  ctx.fillStyle = color;
+  ctx.fillRect(cx - r, cy - r, size, size);
+  ctx.globalCompositeOperation = "destination-out";
+  ctx.beginPath();
+  ctx.arc(cx + r * 0.45, cy - r * 0.15, r * 0.85, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+function drawStar4(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
+  const outer = size / 2;
+  const inner = size * 0.18;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const angle = (Math.PI / 4) * i - Math.PI / 2;
+    const r = i % 2 === 0 ? outer : inner;
+    const px = cx + r * Math.cos(angle);
+    const py = cy + r * Math.sin(angle);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.fill();
+}
+function drawDoubleBar(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  size: number,
+  color: string,
+) {
+  const barW = size * 0.72;
+  const barH = size * 0.18;
+  const gap = size * 0.16;
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.roundRect(cx - barW / 2, cy - gap / 2 - barH, barW, barH, barH * 0.3);
+  ctx.roundRect(cx - barW / 2, cy + gap / 2, barW, barH, barH * 0.3);
+  ctx.fill();
+}
+// Orden fijo: círculo, anillo, triángulo, cuadrado, rombo, cruz, aspa,
+// hexágono, rayo, media luna, estrella de 4 puntas, barra doble.
+const GLYPH_DRAWERS: GlyphDrawer[] = [
+  drawCircle,
+  drawRing,
+  drawTriangle,
+  drawSquare,
+  drawDiamond,
+  drawCross,
+  drawSaltire,
+  drawHexagon,
+  drawBolt,
+  drawCrescent,
+  drawStar4,
+  drawDoubleBar,
+];
+function shuffle<T>(items: T[]): T[] {
+  const result = items.slice();
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+// Genera el tablero de un nivel: toma los primeros N glifos (N = pares),
+// los duplica y baraja con Fisher-Yates antes de repartirlos row-major.
+function buildBoard(cols: number, rows: number): Node[] {
+  const pairs = (cols * rows) / 2;
+  const glyphIds = Array.from({ length: pairs }, (_, i) => i);
+  const deck = shuffle([...glyphIds, ...glyphIds]);
+  const board: Node[] = [];
+  let index = 0;
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      board.push({ glyph: deck[index], state: "hidden", col, row });
+      index++;
+    }
+  }
+  return board;
+}
+export class SinapsisEngine {
+  private ctx: CanvasRenderingContext2D;
+  private callbacks: EngineCallbacks;
+  private level = 1;
+  private cols = 4;
+  private rows = 3;
+  private board: Node[] = [];
+  private layout: Layout = computeLayout(4, 3);
+  // Fondo estático de la rejilla (marco + dorsos con patrón de circuito),
+  // regenerado solo al cambiar de nivel — evita recalcular geometría fija
+  // en cada frame (patrón generalizado por la spec 14).
+  private boardCache: HTMLCanvasElement | null = null;
+  private currentSkin: SkinName = "classic";
+  private get palette(): Palette {
+    return SKIN_PALETTES[this.currentSkin];
+  }
+  private cursor: Cursor = { col: 0, row: 0 };
+  private score = 0;
+  private lives = 5;
+  private phase: "playing" | "dead" | "gameover" = "playing";
+  // Sondeo: índice del primer nodo revelado mientras se espera el segundo.
+  private firstPick: number | null = null;
+  // Par en resolución (a la espera de que cierre su ventana de confirmación
+  // o castigo), guardado para poder confirmarlo o revertirlo al cerrarla.
+  private resolvePair: [number, number] | null = null;
+  private resolveKind: "match" | "miss" | null = null;
+  private resolveTimer = 0;
+  private chain = 0;
+  private roundMs = 0;
+  private gameOverNotified = false;
+  private rafId: number | null = null;
+  private paused = false;
+  private destroyed = false;
+  private lastFrameTime = 0;
+  constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("No se pudo obtener el contexto 2D del canvas");
+    this.ctx = ctx;
+    this.callbacks = callbacks;
+    window.addEventListener("keydown", this.handleKeyDown);
+    this.initState();
+    this.lastFrameTime = performance.now();
+    this.rafId = requestAnimationFrame(this.loop);
+  }
+  private initState() {
+    this.level = 1;
+    this.score = 0;
+    this.lives = 5;
+    this.phase = "playing";
+    this.chain = 0;
+    this.gameOverNotified = false;
+    this.setupGrid(this.level);
+  }
+  private setupGrid(level: number) {
+    const { cols, rows } = gridDimsForLevel(level);
+    this.cols = cols;
+    this.rows = rows;
+    this.layout = computeLayout(cols, rows);
+    this.board = buildBoard(cols, rows);
+    this.cursor = { col: 0, row: 0 };
+    this.firstPick = null;
+    this.resolvePair = null;
+    this.resolveKind = null;
+    this.resolveTimer = 0;
+    this.roundMs = roundTimeMsForLevel(level);
+    this.buildBoardCache();
+  }
+  private buildBoardCache() {
+    const cache = document.createElement("canvas");
+    cache.width = W;
+    cache.height = H;
+    const cctx = cache.getContext("2d");
+    if (!cctx) {
+      this.boardCache = null;
+      return;
+    }
+    const p = this.palette;
+    cctx.fillStyle = p.background;
+    cctx.fillRect(0, 0, W, H);
+    const pad = 10;
+    cctx.strokeStyle = p.nodeBorder;
+    cctx.lineWidth = 2;
+    cctx.strokeRect(
+      this.layout.offsetX - pad,
+      this.layout.offsetY - pad,
+      this.layout.gridW + pad * 2,
+      this.layout.gridH + pad * 2,
+    );
+    cctx.save();
+    cctx.fillStyle = p.nodeBack;
+    cctx.strokeStyle = p.nodeBorder;
+    cctx.lineWidth = 2;
+    cctx.beginPath();
+    for (const node of this.board) {
+      const { x, y, size } = cellRect(node, this.layout);
+      cctx.roundRect(x, y, size, size, 8);
+    }
+    cctx.fill();
+    cctx.stroke();
+    cctx.restore();
+    // Patrón de circuito: cruz + nodo central por celda, un solo trazo.
+    cctx.save();
+    cctx.strokeStyle = p.circuitLine;
+    cctx.lineWidth = 1;
+    cctx.beginPath();
+    for (const node of this.board) {
+      const { x, y, size } = cellRect(node, this.layout);
+      const cx = x + size / 2;
+      const cy = y + size / 2;
+      cctx.moveTo(cx, y + size * 0.15);
+      cctx.lineTo(cx, y + size * 0.85);
+      cctx.moveTo(x + size * 0.15, cy);
+      cctx.lineTo(x + size * 0.85, cy);
+      cctx.moveTo(cx + size * 0.12, cy);
+      cctx.arc(cx, cy, size * 0.12, 0, Math.PI * 2);
+    }
+    cctx.stroke();
+    cctx.restore();
+    this.boardCache = cache;
+  }
+  private nodeIndexAt(col: number, row: number): number {
+    return row * this.cols + col;
+  }
+  private handleKeyDown = (e: KeyboardEvent) => {
+    if (e.code === "Space") {
+      e.preventDefault();
+      this.handleProbe();
+      return;
+    }
+    const dir = KEY_TO_DIRECTION[e.code];
+    if (!dir) return;
+    e.preventDefault();
+    if (this.paused || this.phase === "gameover") return;
+    const delta = DIRECTION_DELTA[dir];
+    const nextCol = this.cursor.col + delta.dc;
+    const nextRow = this.cursor.row + delta.dr;
+    if (
+      nextCol < 0 ||
+      nextCol >= this.cols ||
+      nextRow < 0 ||
+      nextRow >= this.rows
+    )
+      return;
+    this.cursor = { col: nextCol, row: nextRow };
+  };
+  // Sondea el nodo bajo el cursor. Ignorado mientras hay una ventana de
+  // resolución activa (el cursor sigue pudiendo moverse, ver handleKeyDown).
+  private handleProbe() {
+    if (this.paused || this.phase === "gameover") return;
+    if (this.resolveTimer > 0) return;
+    const idx = this.nodeIndexAt(this.cursor.col, this.cursor.row);
+    const node = this.board[idx];
+    if (node.state === "matched") return;
+    if (this.firstPick === null) {
+      node.state = "revealed";
+      this.firstPick = idx;
+      return;
+    }
+    if (idx === this.firstPick) return; // mismo nodo: no-op silencioso
+    const first = this.board[this.firstPick];
+    node.state = "revealed";
+    this.resolvePair = [this.firstPick, idx];
+    this.firstPick = null;
+    if (first.glyph === node.glyph) {
+      this.resolveKind = "match";
+      this.resolveTimer = MATCH_WINDOW_MS;
+    } else {
+      this.resolveKind = "miss";
+      this.resolveTimer = MISS_WINDOW_MS;
+      this.lives -= 1;
+      this.chain = 0;
+      this.phase = "dead";
+    }
+  }
+  // Cierra la ventana de resolución activa: confirma la pareja (`matched`)
+  // o la oculta de nuevo (`hidden`), y dispara game over si ya no quedan
+  // derivaciones.
+  private finalizeResolution() {
+    if (!this.resolvePair) return;
+    const [a, b] = this.resolvePair;
+    if (this.resolveKind === "match") {
+      this.board[a].state = "matched";
+      this.board[b].state = "matched";
+      this.chain += 1;
+      this.score += scoreForChain(this.chain);
+      if (this.board.every((n) => n.state === "matched")) {
+        this.advanceLevel();
+      }
+    } else if (this.resolveKind === "miss") {
+      this.board[a].state = "hidden";
+      this.board[b].state = "hidden";
+      if (this.lives <= 0) {
+        this.phase = "gameover";
+        this.triggerGameOver();
+      } else {
+        this.phase = "playing";
+      }
+    }
+    this.resolvePair = null;
+    this.resolveKind = null;
+  }
+  // Al resolverse todas las sinapsis de la corteza: bonus de capa (segundos
+  // restantes × 10 × nivel actual, antes de subirlo), luego sube el nivel y
+  // regenera la rejilla (setupGrid recarga el reloj). Las derivaciones no
+  // se tocan: se arrastran de una capa a otra durante toda la partida.
+  private advanceLevel() {
+    const secondsLeft = this.roundMs / 1000;
+    this.score += Math.round(secondsLeft * 10 * this.level);
+    this.level += 1;
+    this.setupGrid(this.level);
+  }
+  private update(dt: number) {
+    if (this.phase === "gameover") return;
+    // El reloj de ronda corre en "playing" y en "dead" (ventana de castigo);
+    // se congela solo cuando el loop deja de llamar a update() vía pause().
+    this.roundMs -= dt;
+    if (this.roundMs <= 0) {
+      this.roundMs = 0;
+      this.phase = "gameover";
+      this.triggerGameOver();
+      return;
+    }
+    if (this.resolveTimer > 0) {
+      this.resolveTimer -= dt;
+      if (this.resolveTimer <= 0) {
+        this.resolveTimer = 0;
+        this.finalizeResolution();
+      }
+    }
+  }
+  // Glifos de nodos revelados/confirmados, en dos lotes (uno por estado) con
+  // un solo save()/restore() cada uno en vez de por nodo — solo shadowColor
+  // cambia por glifo dentro del lote, shadowBlur se fija una vez por lote.
+  private drawGlyphs() {
+    const ctx = this.ctx;
+    const p = this.palette;
+    const revealed = this.board.filter((n) => n.state === "revealed");
+    const matched = this.board.filter((n) => n.state === "matched");
+    if (revealed.length) {
+      ctx.save();
+      ctx.shadowBlur = p.glyphBlurRevealed;
+      for (const node of revealed) {
+        const { x, y, size } = cellRect(node, this.layout);
+        const color = p.glyphs[node.glyph];
+        ctx.shadowColor = color;
+        GLYPH_DRAWERS[node.glyph](
+          ctx,
+          x + size / 2,
+          y + size / 2,
+          size * 0.55,
+          color,
+        );
+      }
+      ctx.restore();
+    }
+    if (matched.length) {
+      ctx.save();
+      ctx.shadowBlur = p.glyphBlurMatched;
+      ctx.lineWidth = 2;
+      for (const node of matched) {
+        const { x, y, size } = cellRect(node, this.layout);
+        const color = p.glyphs[node.glyph];
+        ctx.shadowColor = color;
+        ctx.strokeStyle = color;
+        GLYPH_DRAWERS[node.glyph](
+          ctx,
+          x + size / 2,
+          y + size / 2,
+          size * 0.55,
+          color,
+        );
+        ctx.beginPath();
+        ctx.roundRect(x, y, size, size, 8);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+  // Marco parpadeante sobre la celda activa (blink por reloj real, no por
+  // frame, para que el ritmo no dependa del framerate).
+  private drawCursor(now: number) {
+    if (Math.floor(now / CURSOR_BLINK_MS) % 2 !== 0) return;
+    const node = this.board[this.nodeIndexAt(this.cursor.col, this.cursor.row)];
+    if (!node) return;
+    const { x, y, size } = cellRect(node, this.layout);
+    const ctx = this.ctx;
+    const p = this.palette;
+    ctx.save();
+    ctx.strokeStyle = p.cursor;
+    ctx.lineWidth = 3;
+    ctx.shadowColor = p.cursor;
+    ctx.shadowBlur = p.cursorBlur;
+    ctx.beginPath();
+    ctx.roundRect(x, y, size, size, 8);
+    ctx.stroke();
+    ctx.restore();
+  }
+  // Destello rojo del marco del tablero durante la ventana de castigo.
+  private drawDeathFlash() {
+    const ctx = this.ctx;
+    const p = this.palette;
+    const pad = 10;
+    ctx.save();
+    ctx.strokeStyle = p.deadFlash;
+    ctx.lineWidth = 6;
+    ctx.shadowColor = p.deadFlash;
+    ctx.shadowBlur = p.deathFlashBlur;
+    ctx.strokeRect(
+      this.layout.offsetX - pad,
+      this.layout.offsetY - pad,
+      this.layout.gridW + pad * 2,
+      this.layout.gridH + pad * 2,
+    );
+    ctx.restore();
+  }
+  private drawHUD() {
+    const ctx = this.ctx;
+    const p = this.palette;
+    ctx.save();
+    ctx.fillStyle = p.hudBg;
+    ctx.fillRect(0, 0, W, HUD_H);
+    ctx.strokeStyle = p.nodeBorder;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, HUD_H);
+    ctx.lineTo(W, HUD_H);
+    ctx.stroke();
+    ctx.fillStyle = p.hudColor;
+    ctx.font = '15px "Courier New", monospace';
+    ctx.textAlign = "left";
+    ctx.fillText(`SCORE  ${this.score}`, 14, 24);
+    ctx.textAlign = "center";
+    ctx.fillText(`CAPA ${this.level}`, W / 2, 24);
+    ctx.textAlign = "right";
+    const lifeStartX = W - 14 - 4 * 18;
+    for (let i = 0; i < 5; i++) {
+      ctx.beginPath();
+      ctx.fillStyle = i < this.lives ? p.lifeOn : p.lifeOff;
+      ctx.arc(lifeStartX - i * 18, 20, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    const total = roundTimeMsForLevel(this.level);
+    const pct = Math.max(0, Math.min(1, this.roundMs / total));
+    const barW = 220;
+    const barX = (W - barW) / 2;
+    const barY = 42;
+    const barH = 8;
+    ctx.strokeStyle = p.hudColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(barX, barY, barW, barH);
+    ctx.fillStyle = pct > 0.3 ? p.timerHigh : p.timerLow;
+    ctx.fillRect(barX, barY, barW * pct, barH);
+    ctx.restore();
+  }
+  private draw(now: number) {
+    const ctx = this.ctx;
+    if (this.boardCache) {
+      ctx.drawImage(this.boardCache, 0, 0);
+    } else {
+      ctx.fillStyle = this.palette.background;
+      ctx.fillRect(0, 0, W, H);
+    }
+    this.drawGlyphs();
+    this.drawCursor(now);
+    if (this.phase === "dead") this.drawDeathFlash();
+    // Las scanlines van sobre el tablero pero debajo del HUD, para que
+    // score/capa/derivaciones y la barra de tiempo sigan legibles.
+    if (this.palette.scanlines) this.drawScanlines();
+    this.drawHUD();
+  }
+  // Buffer offscreen con las scanlines pre-renderizadas: se dibuja una sola
+  // vez y luego cada frame solo hace drawImage(). El patrón no depende de la
+  // skin, así que se cachea para toda la vida del engine.
+  private scanlinesBuffer: HTMLCanvasElement | null = null;
+  private drawScanlines() {
+    if (!this.scanlinesBuffer) {
+      const buffer = document.createElement("canvas");
+      buffer.width = W;
+      buffer.height = H;
+      const bctx = buffer.getContext("2d");
+      if (bctx) {
+        bctx.fillStyle = "rgba(0, 0, 0, 0.22)";
+        for (let y = 0; y < H; y += 3) {
+          bctx.fillRect(0, y, W, 1);
+        }
+      }
+      this.scanlinesBuffer = buffer;
+    }
+    this.ctx.drawImage(this.scanlinesBuffer, 0, 0);
+  }
+  private triggerGameOver() {
+    if (this.gameOverNotified) return;
+    this.gameOverNotified = true;
+    this.callbacks.onGameOver(this.score);
+  }
+  private loop = (now: number) => {
+    const dt = this.lastFrameTime ? now - this.lastFrameTime : 16;
+    this.lastFrameTime = now;
+    this.update(dt);
+    this.draw(now);
+    this.callbacks.onStats({
+      score: this.score,
+      lives: this.lives,
+      level: this.level,
+      state: this.phase,
+    });
+    if (!this.paused) {
+      this.rafId = requestAnimationFrame(this.loop);
+    }
+  };
+  pause(): void {
+    if (this.paused) return;
+    this.paused = true;
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+  }
+  resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    this.lastFrameTime = performance.now();
+    this.rafId = requestAnimationFrame(this.loop);
+  }
+  reset(): void {
+    this.initState();
+    if (this.paused) {
+      this.paused = false;
+    }
+    this.lastFrameTime = performance.now();
+    if (this.rafId === null) {
+      this.rafId = requestAnimationFrame(this.loop);
+    }
+  }
+  // Cambia la skin activa. Regenera el cache del tablero (que tiene el fondo,
+  // el marco, los dorsos y el patrón de circuito horneados) y redibuja
+  // sincrónicamente, para que el cambio se vea al instante también en pausa.
+  setSkin(skin: SkinName): void {
+    if (!(skin in SKIN_PALETTES) || skin === this.currentSkin) return;
+    this.currentSkin = skin;
+    this.buildBoardCache();
+    this.draw(performance.now());
+  }
+  forceGameOver(): void {
+    if (this.phase === "gameover") return;
+    this.phase = "gameover";
+    this.triggerGameOver();
+    this.draw(performance.now());
+    this.callbacks.onStats({
+      score: this.score,
+      lives: this.lives,
+      level: this.level,
+      state: "gameover",
+    });
+  }
+  destroy(): void {
+    this.destroyed = true;
+    this.pause();
+    window.removeEventListener("keydown", this.handleKeyDown);
+  }
+}
