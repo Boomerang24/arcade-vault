@@ -45,7 +45,7 @@ export function maxTileValue(board: Board): number {
 // (la ficha máxima solo puede crecer). Con tablero vacío devuelve 1.
 export function levelFromMaxTile(maxTile: number): number {
   if (maxTile < 2) return 1;
-  return Math.log2(maxTile) - 1;
+  return Math.log2(maxTile);
 }
 // Cada línea (fila o columna) devuelta en orden desde el borde de destino
 // hacia el opuesto, que es como debe resolverse el deslizamiento.
@@ -591,7 +591,10 @@ export class Game2048Engine {
     if (this.phase === "gameover") {
       this.drawOverlay("FIN", `Puntuación: ${this.score}`);
     } else if (this.paused) {
-      this.drawOverlay("PAUSA", "Pulsa REANUDAR para seguir");
+      // Solo un velo: el texto "EN PAUSA" lo pone jugar-client encima.
+      const ctx = this.ctx;
+      ctx.fillStyle = "rgba(10, 10, 15, 0.55)";
+      ctx.fillRect(BOARD_X, BOARD_Y, BOARD_SIZE, BOARD_SIZE);
     }
   }
 }
