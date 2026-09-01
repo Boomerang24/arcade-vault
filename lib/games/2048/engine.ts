@@ -27,7 +27,7 @@ export type SlideResult = {
   gainedScore: number; // suma del valor de todas las fichas resultantes de fusión
   mergedIds: number[]; // ids de fichas supervivientes que absorbieron a otra (para el "pop")
   from: Map<number, Cell>; // id -> celda previa, para toda ficha existente antes del turno
-  absorbed: { id: number; to: Cell }[]; // fichas eliminadas por fusión + su celda destino de viaje
+  absorbed: { id: number; value: number; to: Cell }[]; // fichas eliminadas por fusión: valor previo + celda destino de viaje
 };
 export const idx = (row: number, col: number) => row * SIZE + col;
 export function createEmptyBoard(): Board {
@@ -83,7 +83,7 @@ export function slide(board: Board, dir: Direction): SlideResult {
   for (const t of board) if (t) from.set(t.id, { row: t.row, col: t.col });
   const next: Board = createEmptyBoard();
   const mergedIds: number[] = [];
-  const absorbed: { id: number; to: Cell }[] = [];
+  const absorbed: { id: number; value: number; to: Cell }[] = [];
   let gainedScore = 0;
   let moved = false;
   for (const line of traversalLines(dir)) {
@@ -106,6 +106,7 @@ export function slide(board: Board, dir: Direction): SlideResult {
         gainedScore += lastPlaced.value;
         absorbed.push({
           id: tile.id,
+          value: tile.value,
           to: { row: target.row, col: target.col },
         });
         moved = true;
@@ -244,6 +245,35 @@ function cellOrigin(row: number, col: number): { x: number; y: number } {
     y: BOARD_Y + BOARD_PAD + row * (CELL + CELL_GAP),
   };
 }
+// Interpola en pixeles entre dos celdas.
+function lerpCell(from: Cell, to: Cell, p: number): { x: number; y: number } {
+  const a = cellOrigin(from.row, from.col);
+  const b = cellOrigin(to.row, to.col);
+  return { x: a.x + (b.x - a.x) * p, y: a.y + (b.y - a.y) * p };
+}
+function easeOutCubic(x: number): number {
+  return 1 - Math.pow(1 - x, 3);
+}
+// Duracion del deslizamiento (~110 ms) y del "asentamiento" posterior (pop de
+// fusion + aparicion de la ficha nueva). La entrada se desbloquea al terminar
+// ambos tramos.
+const SLIDE_MS = 110;
+const SETTLE_MS = 90;
+const KEY_TO_DIR: Record<string, Direction> = {
+  ArrowUp: "up",
+  ArrowDown: "down",
+  ArrowLeft: "left",
+  ArrowRight: "right",
+};
+// Datos de la animacion del turno en curso.
+type AnimState = {
+  from: Map<number, Cell>; // id -> celda previa (fichas supervivientes)
+  absorbed: { id: number; value: number; to: Cell }[];
+  mergedIds: Set<number>; // supervivientes que absorbieron a otra
+  spawnedId: number | null; // id de la ficha nueva, o null si no cabia
+  spawnResolved: boolean; // ya se intento generar la ficha nueva
+  t: number; // ms transcurridos
+};
 export class Game2048Engine {
   private ctx: CanvasRenderingContext2D;
   private callbacks: EngineCallbacks;
@@ -253,6 +283,13 @@ export class Game2048Engine {
   private moves = 0;
   private maxTile = 0;
   private phase: "playing" | "gameover" = "playing";
+  private paused = false;
+  private anim: AnimState | null = null;
+  // Buffer de UNA sola pulsacion durante la animacion: se guarda la primera y
+  // se descartan las siguientes.
+  private bufferedDir: Direction | null = null;
+  private rafId: number | null = null;
+  private lastFrame = 0;
   private pixelFamily = '"Press Start 2P", monospace';
   private monoFamily = '"Courier New", monospace';
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
@@ -269,8 +306,70 @@ export class Game2048Engine {
     this.board = init.board;
     this.nextId = init.nextId;
     this.maxTile = maxTileValue(this.board);
-    this.draw();
+    window.addEventListener("keydown", this.handleKeyDown);
+    this.lastFrame = performance.now();
+    this.rafId = requestAnimationFrame(this.loop);
   }
+  private handleKeyDown = (e: KeyboardEvent) => {
+    const dir = KEY_TO_DIR[e.code];
+    if (!dir) return;
+    e.preventDefault();
+    if (this.paused || this.phase !== "playing") return;
+    if (this.anim) {
+      if (this.bufferedDir === null) this.bufferedDir = dir;
+      return;
+    }
+    this.applyMove(dir);
+  };
+  // Resuelve un turno. Un movimiento invalido (ni desplazamiento ni fusion) no
+  // genera ficha, no anima y no consume turno.
+  private applyMove(dir: Direction) {
+    const res = slide(this.board, dir);
+    if (!res.moved) return;
+    this.board = res.board;
+    this.score += res.gainedScore;
+    this.moves += 1;
+    this.maxTile = Math.max(this.maxTile, maxTileValue(this.board));
+    this.anim = {
+      from: res.from,
+      absorbed: res.absorbed,
+      mergedIds: new Set(res.mergedIds),
+      spawnedId: null,
+      spawnResolved: false,
+      t: 0,
+    };
+  }
+  // Orden fijo (ver Riesgos de la spec): resolver turno -> animar deslizamiento
+  // -> generar ficha nueva. La comprobacion de bloqueo llega en el paso 4.
+  private resolveSpawn() {
+    if (!this.anim || this.anim.spawnResolved) return;
+    this.anim.spawnResolved = true;
+    const { board, tile } = spawnTile(this.board, this.nextId);
+    this.board = board;
+    if (tile) {
+      this.anim.spawnedId = tile.id;
+      this.nextId += 1;
+    }
+  }
+  private flushBuffer() {
+    const dir = this.bufferedDir;
+    this.bufferedDir = null;
+    if (dir) this.applyMove(dir);
+  }
+  private loop = (now: number) => {
+    const dt = now - this.lastFrame;
+    this.lastFrame = now;
+    if (!this.paused && this.anim) {
+      this.anim.t += dt;
+      if (this.anim.t >= SLIDE_MS) this.resolveSpawn();
+      if (this.anim.t >= SLIDE_MS + SETTLE_MS) {
+        this.anim = null;
+        this.flushBuffer();
+      }
+    }
+    this.draw();
+    this.rafId = requestAnimationFrame(this.loop);
+  };
   private get level(): number {
     return levelFromMaxTile(this.maxTile);
   }
@@ -357,9 +456,47 @@ export class Game2048Engine {
     ctx.restore();
   }
   private drawTiles() {
+    if (this.anim) {
+      this.drawTilesAnimating(this.anim);
+      return;
+    }
     for (const tile of tilesOf(this.board)) {
       const { x, y } = cellOrigin(tile.row, tile.col);
       this.drawTile(tile.value, x, y);
+    }
+  }
+  private drawTilesAnimating(a: AnimState) {
+    const slideDone = a.t >= SLIDE_MS;
+    const slideP = easeOutCubic(Math.min(a.t / SLIDE_MS, 1));
+    const settleU = slideDone ? Math.min((a.t - SLIDE_MS) / SETTLE_MS, 1) : 0;
+    // Fichas absorbidas: viajan al destino y desaparecen al terminar el slide.
+    if (!slideDone) {
+      for (const ab of a.absorbed) {
+        const origin = a.from.get(ab.id);
+        if (!origin) continue;
+        const { x, y } = lerpCell(origin, ab.to, slideP);
+        this.drawTile(ab.value, x, y);
+      }
+    }
+    for (const tile of tilesOf(this.board)) {
+      const cell = { row: tile.row, col: tile.col };
+      if (tile.id === a.spawnedId) {
+        const { x, y } = cellOrigin(tile.row, tile.col);
+        this.drawTile(tile.value, x, y, 0.3 + 0.7 * settleU, settleU);
+        continue;
+      }
+      const origin = a.from.get(tile.id) ?? cell;
+      const { x, y } = lerpCell(origin, cell, slideP);
+      const merged = a.mergedIds.has(tile.id);
+      if (merged && !slideDone) {
+        // Durante el slide la superviviente aun muestra su valor previo.
+        this.drawTile(tile.value / 2, x, y);
+      } else if (merged && slideDone) {
+        const pop = 1 + 0.18 * Math.sin(Math.PI * settleU);
+        this.drawTile(tile.value, x, y, pop);
+      } else {
+        this.drawTile(tile.value, x, y);
+      }
     }
   }
   private draw() {
