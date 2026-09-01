@@ -25,6 +25,11 @@ const ROW_H = 31; // 36·sin(60°) ≈ 31, separación vertical entre filas
 const DANGER_Y = 500; // línea de peligro (centro de burbuja por debajo = purga)
 const NOZZLE_X = 400;
 const NOZZLE_Y = 545;
+// Manómetro del panel derecho (marco estático + relleno dinámico).
+const GAUGE_X = POOL_RIGHT + 30;
+const GAUGE_Y = 250;
+const GAUGE_W = 20;
+const GAUGE_H = 260;
 const MUZZLE_Y = NOZZLE_Y - 14; // punta del caño
 // Filas "largas" (offset 0): 13 celdas, centro x = 184 + 36·c  (c = 0..12)
 // Filas "cortas" (offset D/2): 12 celdas, centro x = 202 + 36·c (c = 0..11)
@@ -611,18 +616,18 @@ export class SifonEngine {
     }
   }
   // ---- render ----
-  private renderMassCache() {
-    const ctx = this.massCtx;
+  // Dibuja N burbujas agrupadas por color con un solo save/shadowBlur/restore
+  // por grupo (spec 14 §1), y una única pasada de brillos especulares que
+  // acumula todos los arcos en un solo path. Compartido por la masa cacheada y
+  // por las burbujas que caen, que son el lote grande del hot path.
+  private drawBubbleGroups(
+    ctx: CanvasRenderingContext2D,
+    byColor: Map<BubbleColor, Array<{ x: number; y: number }>>,
+  ) {
     const pal = this.palette;
-    ctx.clearRect(0, 0, W, H);
-    const byColor = new Map<BubbleColor, Array<{ x: number; y: number }>>();
-    for (const [k, color] of this.mass) {
-      const { r, c } = parseKey(k);
-      const arr = byColor.get(color) ?? [];
-      arr.push(cellToPixel(r, c, this.techoY));
-      byColor.set(color, arr);
-    }
-    // Cuerpos: un save/shadowBlur por color, no por burbuja.
+    // Cuerpos: un save/shadowBlur por color, no por burbuja. El gradiente
+    // radial está centrado en cada burbuja, así que el fill sigue siendo
+    // individual — lo que se agrupa es el estado caro del contexto.
     for (const [color, pts] of byColor) {
       const hex = pal.bubbles[color];
       ctx.save();
@@ -647,17 +652,33 @@ export class SifonEngine {
       }
       ctx.restore();
     }
-    // Brillos especulares: pasada única sin sombra.
+    // Brillos especulares: color plano => un único beginPath/fill para todos.
+    // moveTo() antes de cada arc() para evitar la línea fantasma que conecta
+    // el fin de un arco con el inicio del siguiente (trampa de la spec 14).
     ctx.save();
+    ctx.shadowBlur = 0;
     ctx.fillStyle = pal.bubbleSpecular;
+    ctx.beginPath();
     for (const pts of byColor.values()) {
       for (const pt of pts) {
-        ctx.beginPath();
+        ctx.moveTo(pt.x - 1.5, pt.y - 6);
         ctx.arc(pt.x - 5, pt.y - 6, 3.5, 0, Math.PI * 2);
-        ctx.fill();
       }
     }
+    ctx.fill();
     ctx.restore();
+  }
+  private renderMassCache() {
+    const ctx = this.massCtx;
+    ctx.clearRect(0, 0, W, H);
+    const byColor = new Map<BubbleColor, Array<{ x: number; y: number }>>();
+    for (const [k, color] of this.mass) {
+      const { r, c } = parseKey(k);
+      const arr = byColor.get(color) ?? [];
+      arr.push(cellToPixel(r, c, this.techoY));
+      byColor.set(color, arr);
+    }
+    this.drawBubbleGroups(ctx, byColor);
     this.massDirty = false;
   }
   private drawBubbleAt(x: number, y: number, color: BubbleColor) {
@@ -700,47 +721,75 @@ export class SifonEngine {
     ctx.lineTo(POOL_RIGHT, POOL_BOTTOM);
     ctx.stroke();
   }
-  private drawDangerLine() {
-    const ctx = this.ctx;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(POOL_LEFT, DANGER_Y - 5, POOL_RIGHT - POOL_LEFT, 10);
-    ctx.clip();
-    ctx.fillStyle = this.palette.dangerAlt;
-    ctx.fillRect(POOL_LEFT, DANGER_Y - 5, POOL_RIGHT - POOL_LEFT, 10);
-    ctx.fillStyle = this.palette.danger;
-    for (let x = POOL_LEFT - 20; x < POOL_RIGHT; x += 20) {
-      ctx.beginPath();
-      ctx.moveTo(x, DANGER_Y + 5);
-      ctx.lineTo(x + 10, DANGER_Y + 5);
-      ctx.lineTo(x + 20, DANGER_Y - 5);
-      ctx.lineTo(x + 10, DANGER_Y - 5);
-      ctx.closePath();
-      ctx.fill();
-    }
-    ctx.restore();
+  // Crea un canvas en memoria (no `OffscreenCanvas`: fallback universal, ver
+  // Riesgos de la spec 14) y ejecuta `paint` una sola vez sobre él.
+  private makeBuffer(
+    w: number,
+    h: number,
+    paint: (ctx: CanvasRenderingContext2D) => void,
+  ): HTMLCanvasElement {
+    const buffer = document.createElement("canvas");
+    buffer.width = w;
+    buffer.height = h;
+    const bctx = buffer.getContext("2d");
+    if (bctx) paint(bctx);
+    return buffer;
   }
-  private drawPress() {
-    const ctx = this.ctx;
-    const pal = this.palette;
-    const top = Math.max(0, this.techoY - 26);
-    const grad = ctx.createLinearGradient(0, top, 0, this.techoY);
-    grad.addColorStop(0, pal.pressBolt);
-    grad.addColorStop(1, pal.press);
-    ctx.fillStyle = grad;
-    ctx.fillRect(POOL_LEFT, top, POOL_RIGHT - POOL_LEFT, this.techoY - top);
-    ctx.strokeStyle = pal.pressEdge;
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(POOL_LEFT, this.techoY);
-    ctx.lineTo(POOL_RIGHT, this.techoY);
-    ctx.stroke();
-    ctx.fillStyle = pal.pressBolt;
-    for (let x = POOL_LEFT + 20; x < POOL_RIGHT; x += 48) {
-      ctx.beginPath();
-      ctx.arc(x, this.techoY - 13, 3, 0, Math.PI * 2);
-      ctx.fill();
+  // La línea de peligro está siempre en el mismo sitio y sus galones no
+  // dependen de nada que cambie frame a frame: solo de la skin activa.
+  private dangerBuffer: HTMLCanvasElement | null = null;
+  private drawDangerLine() {
+    const w = POOL_RIGHT - POOL_LEFT;
+    if (!this.dangerBuffer) {
+      const pal = this.palette;
+      this.dangerBuffer = this.makeBuffer(w, 10, (ctx) => {
+        // El canvas del buffer recorta igual que el `clip()` original.
+        ctx.fillStyle = pal.dangerAlt;
+        ctx.fillRect(0, 0, w, 10);
+        ctx.fillStyle = pal.danger;
+        for (let x = -20; x < w; x += 20) {
+          ctx.moveTo(x, 10);
+          ctx.lineTo(x + 10, 10);
+          ctx.lineTo(x + 20, 0);
+          ctx.lineTo(x + 10, 0);
+          ctx.closePath();
+        }
+        ctx.fill();
+      });
     }
+    this.ctx.drawImage(this.dangerBuffer, POOL_LEFT, DANGER_Y - 5);
+  }
+  // La prensa cambia de posición (`techoY`) pero no de forma: se hornea una
+  // franja de 468×28 y cada frame solo se traslada con un drawImage().
+  private pressBuffer: HTMLCanvasElement | null = null;
+  private drawPress() {
+    const w = POOL_RIGHT - POOL_LEFT;
+    if (!this.pressBuffer) {
+      const pal = this.palette;
+      this.pressBuffer = this.makeBuffer(w, 28, (ctx) => {
+        const grad = ctx.createLinearGradient(0, 0, 0, 26);
+        grad.addColorStop(0, pal.pressBolt);
+        grad.addColorStop(1, pal.press);
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, w, 26);
+        ctx.strokeStyle = pal.pressEdge;
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(0, 26);
+        ctx.lineTo(w, 26);
+        ctx.stroke();
+        ctx.fillStyle = pal.pressBolt;
+        ctx.beginPath();
+        for (let x = 20; x < w; x += 48) {
+          ctx.moveTo(x + 3, 13);
+          ctx.arc(x, 13, 3, 0, Math.PI * 2);
+        }
+        ctx.fill();
+      });
+    }
+    // `techoY` nunca baja de POOL_TOP (60), así que la franja de 26px siempre
+    // cabe entera y no hace falta el clamp a 0 del código original.
+    this.ctx.drawImage(this.pressBuffer, POOL_LEFT, this.techoY - 26);
   }
   private drawNozzle() {
     const ctx = this.ctx;
@@ -782,33 +831,53 @@ export class SifonEngine {
     ctx.fill();
     ctx.restore();
   }
+  // Chrome estático del HUD: fondos y marcos de los paneles, rótulos fijos y
+  // marco del manómetro. Nada de esto depende del frame, solo de la skin, así
+  // que se hornea una vez (buffer del tamaño del canvas para que los
+  // `strokeRect` a medio píxel caigan exactamente donde caían antes).
+  private panelsBuffer: HTMLCanvasElement | null = null;
+  private getPanelsBuffer(): HTMLCanvasElement {
+    if (this.panelsBuffer) return this.panelsBuffer;
+    const pal = this.palette;
+    this.panelsBuffer = this.makeBuffer(W, H, (ctx) => {
+      ctx.fillStyle = pal.panelBg;
+      ctx.fillRect(0, 0, POOL_LEFT, H);
+      ctx.fillRect(POOL_RIGHT, 0, W - POOL_RIGHT, H);
+      ctx.fillRect(0, 0, W, POOL_TOP);
+      ctx.strokeStyle = pal.panelLine;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(0.5, 0.5, POOL_LEFT - 1, H - 1);
+      ctx.strokeRect(POOL_RIGHT + 0.5, 0.5, W - POOL_RIGHT - 1, H - 1);
+      ctx.fillStyle = pal.hud;
+      ctx.font = "13px monospace";
+      ctx.textAlign = "left";
+      ctx.fillText("TANQUE // EMBOTELLADORA", 14, 24);
+      ctx.fillStyle = pal.hudDim;
+      ctx.font = "11px monospace";
+      ctx.fillText("PUNTUACIÓN", 16, 90);
+      ctx.fillText("NIVEL", 16, 150);
+      ctx.fillText("VIDAS", 16, 210);
+      ctx.fillText("SIGUIENTE", POOL_RIGHT + 16, 90);
+      ctx.fillText("PRESIÓN", POOL_RIGHT + 16, GAUGE_Y - 12);
+      ctx.strokeStyle = pal.gaugeFrame;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(GAUGE_X, GAUGE_Y, GAUGE_W, GAUGE_H);
+    });
+    return this.panelsBuffer;
+  }
   private drawPanels() {
     const ctx = this.ctx;
     const pal = this.palette;
-    ctx.fillStyle = pal.panelBg;
-    ctx.fillRect(0, 0, POOL_LEFT, H);
-    ctx.fillRect(POOL_RIGHT, 0, W - POOL_RIGHT, H);
-    ctx.fillRect(0, 0, W, POOL_TOP);
-    ctx.strokeStyle = pal.panelLine;
-    ctx.lineWidth = 1;
-    ctx.strokeRect(0.5, 0.5, POOL_LEFT - 1, H - 1);
-    ctx.strokeRect(POOL_RIGHT + 0.5, 0.5, W - POOL_RIGHT - 1, H - 1);
-    // franja superior
-    ctx.fillStyle = pal.hud;
-    ctx.font = "13px monospace";
-    ctx.textAlign = "left";
-    ctx.fillText("TANQUE // EMBOTELLADORA", 14, 24);
+    ctx.drawImage(this.getPanelsBuffer(), 0, 0);
+    // A partir de aquí, solo lo que cambia frame a frame. El estado del
+    // contexto se fija explícitamente porque ya no viene arrastrado del
+    // chrome estático.
     ctx.textAlign = "right";
     ctx.fillStyle = pal.hudDim;
+    ctx.font = "13px monospace";
     const fila = Math.round((this.techoY - POOL_TOP) / ROW_H);
     ctx.fillText(`PRENSA · FILA ${fila}`, W - 14, 24);
-    // panel izquierdo
     ctx.textAlign = "left";
-    ctx.fillStyle = pal.hudDim;
-    ctx.font = "11px monospace";
-    ctx.fillText("PUNTUACIÓN", 16, 90);
-    ctx.fillText("NIVEL", 16, 150);
-    ctx.fillText("VIDAS", 16, 210);
     ctx.fillStyle = pal.hud;
     ctx.font = "20px monospace";
     ctx.fillText(String(this.score), 16, 114);
@@ -826,31 +895,19 @@ export class SifonEngine {
       }
     }
     // panel derecho: cola + manómetro
-    ctx.fillStyle = pal.hudDim;
-    ctx.font = "11px monospace";
-    ctx.fillText("SIGUIENTE", POOL_RIGHT + 16, 90);
     for (let i = 0; i < 2; i++) {
       this.drawBubbleAt(POOL_RIGHT + 40, 120 + i * 44, this.queue[i]);
     }
-    const gx = POOL_RIGHT + 30;
-    const gy = 250;
-    const gw = 20;
-    const gh = 260;
-    ctx.fillStyle = pal.hudDim;
-    ctx.fillText("PRESIÓN", POOL_RIGHT + 16, gy - 12);
-    ctx.strokeStyle = pal.gaugeFrame;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(gx, gy, gw, gh);
     const frac = Math.max(
       0,
       Math.min(1, this.pressure / pressureThreshold(this.level)),
     );
     ctx.fillStyle = pal.gaugeFill;
     ctx.fillRect(
-      gx + 2,
-      gy + gh - gh * frac + 2,
-      gw - 4,
-      Math.max(0, gh * frac - 4),
+      GAUGE_X + 2,
+      GAUGE_Y + GAUGE_H - GAUGE_H * frac + 2,
+      GAUGE_W - 4,
+      Math.max(0, GAUGE_H * frac - 4),
     );
   }
   private drawOverlay(title: string, sub: string) {
@@ -921,7 +978,21 @@ export class SifonEngine {
     this.drawWell();
     if (this.massDirty) this.renderMassCache();
     ctx.drawImage(this.massCanvas, 0, 0);
-    for (const f of this.falling) this.drawBubbleAt(f.x, f.y, f.color);
+    // Un desprendimiento puede soltar decenas de burbujas a la vez y todas
+    // viven ~70 frames: es el único lote grande del hot path, así que va
+    // agrupado por color en vez de un save/shadowBlur por burbuja.
+    if (this.falling.length > 0) {
+      const fallingByColor = new Map<
+        BubbleColor,
+        Array<{ x: number; y: number }>
+      >();
+      for (const f of this.falling) {
+        const arr = fallingByColor.get(f.color) ?? [];
+        arr.push({ x: f.x, y: f.y });
+        fallingByColor.set(f.color, arr);
+      }
+      this.drawBubbleGroups(ctx, fallingByColor);
+    }
     if (this.projectile) {
       this.drawBubbleAt(
         this.projectile.x,
@@ -1004,6 +1075,13 @@ export class SifonEngine {
     if (!(skin in SKIN_PALETTES) || skin === this.currentSkin) return;
     this.currentSkin = skin;
     this.massDirty = true;
+    // Los buffers estáticos están horneados con los colores de la skin
+    // anterior: se invalidan y el getter lazy los reconstruye en el próximo
+    // draw(). Las scanlines no dependen de la skin (negro semitransparente),
+    // así que su buffer se conserva.
+    this.dangerBuffer = null;
+    this.pressBuffer = null;
+    this.panelsBuffer = null;
     this.draw();
     if (this.paused) this.drawOverlay("PAUSA", "");
   }

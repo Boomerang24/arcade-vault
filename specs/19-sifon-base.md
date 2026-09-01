@@ -211,6 +211,29 @@ Se agrega `sifon: { Canvas: SifonCanvas }` a `GAME_REGISTRY` en `lib/games/regis
 - **Sin assets externos.** No se crea `public/games/sifon/`: burbujas, prensa, boquilla y tanque son círculos con gradiente y rectángulos con `shadowBlur`, en la línea de Asteroides y Tetris. Evita binarios y mantiene el bundle intacto.
 - **Todo lo "jugoso" (burbujas especiales, combos, audio, partículas) se difiere a la spec 20.** Esta spec entrega un juego completo y guardable de punta a punta; la siguiente lo enriquece sin tocar el contrato. Así la primera puede implementarse, verificarse y mergearse sola.
 
+## Optimización de render — patrón spec 14 (`@game-performance-booster`, 2026-08-31)
+
+Pasada de rendimiento posterior a la implementación. Único archivo tocado: `lib/games/sifon/engine.ts`. Sin cambios de mecánica, física, `EngineStats` ni resolución.
+
+**Estado previo:** la masa de burbujas asentadas ya se horneaba en `massCanvas` con dirty-flag (`massDirty`) y las scanlines de `retro` ya usaban un `scanlinesBuffer` lazy. Quedaban un lote grande por-entidad y tres bloques de geometría estática redibujados cada frame.
+
+**Batching (spec 14 §1):**
+
+- Nuevo helper `drawBubbleGroups()`: un `save`/`shadowBlur`/`restore` por color y **una sola** pasada especular con un `beginPath()` que acumula todos los arcos y un `fill()` final (antes: `beginPath`+`fill` por burbuja). `moveTo(pt.x-1.5, pt.y-6)` antes de cada `arc()` para evitar la línea fantasma.
+- `renderMassCache()` delega en el helper.
+- `draw()` agrupa por color las burbujas que caen (antes un `drawBubbleAt()` con su propio `save`/`shadowBlur` por burbuja). Peor caso ~60 burbujas tras un desprendimiento: de 64 `save`/128 `shadowBlur` a 5/5.
+- No tocados por ser instancia única por frame: proyectil, burbuja cargada, cola, `drawNozzle()`.
+
+**Cacheo offscreen (spec 14 §2)** — buffers vía `makeBuffer()`, getter lazy, invalidados en `setSkin()`:
+
+- `dangerBuffer` (468×10): ~25 galones de la línea de peligro → 1 `drawImage`; el recorte del buffer sustituye al `clip()`.
+- `pressBuffer` (468×28): gradiente + borde + 10 pernos → 1 `drawImage` trasladado a `techoY-26`.
+- `panelsBuffer` (800×600): fondos/marcos de paneles, 6 rótulos fijos y marco del manómetro → 1 `drawImage`. Score, nivel, vidas, "FILA n", cola y relleno del manómetro siguen dinámicos.
+- `scanlinesBuffer` se conserva sin invalidar (negro semitransparente, no depende de la skin).
+- Constantes `GAUGE_X/Y/W/H` extraídas para que marco (buffer) y relleno (dinámico) no se desincronicen.
+
+**Verificación:** `npm run build` en verde; `eslint lib/games/sifon/engine.ts` limpio (los 379 errores de `npm run lint` son preexistentes en `references/templates/*.jsx`). Pendiente de verificación humana: FPS reales en Chrome real con CPU throttling 4x (headless no cuenta) y repaso visual por skin, en especial el recoloreo de buffers al cambiar de skin en caliente.
+
 ## Riesgos identificados
 
 - **Túnel del proyectil a 620 px/s.** A 60fps el proyectil avanza ~10px por frame, pero con un frame largo (pestaña recuperando foco, delta acumulado) puede saltar más de un diámetro y atravesar la masa hasta pegarse en el techo. Hay que submuestrear el desplazamiento del frame en pasos de como máximo `D/2` y evaluar la colisión en cada subpaso, además de acotar el delta máximo por frame.
