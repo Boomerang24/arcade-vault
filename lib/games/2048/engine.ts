@@ -389,6 +389,17 @@ function easeOutCubic(x: number): number {
 // ambos tramos.
 const SLIDE_MS = 110;
 const SETTLE_MS = 90;
+// Etiquetas fijas del panel lateral y la Y de cada fila: no dependen del
+// estado de la partida, asi que viven en la capa estatica cacheada.
+const PANEL_LABELS = [
+  "PUNTOS",
+  "MEJOR FICHA",
+  "NIVEL",
+  "VIDAS",
+  "MOVIMIENTOS",
+] as const;
+const PANEL_ROW_Y0 = 110;
+const PANEL_ROW_STEP = 66;
 const KEY_TO_DIR: Record<string, Direction> = {
   ArrowUp: "up",
   ArrowDown: "down",
@@ -442,6 +453,12 @@ export class Game2048Engine {
     this.nextId = init.nextId;
     this.maxTile = maxTileValue(this.board);
     window.addEventListener("keydown", this.handleKeyDown);
+    // El cromo del panel se cachea con texto: si las webfonts aun no habian
+    // cargado al pintar el buffer, quedaria congelado con la fuente de
+    // fallback. Al resolverse `fonts.ready` se invalida para repintarlo.
+    document.fonts?.ready.then(() => {
+      this.staticLayer = null;
+    });
     this.lastFrame = performance.now();
     this.rafId = requestAnimationFrame(this.loop);
   }
@@ -578,15 +595,37 @@ export class Game2048Engine {
   setSkin(skin: SkinName): void {
     if (!(skin in SKIN_PALETTES) || skin === this.currentSkin) return;
     this.currentSkin = skin;
+    // La capa estatica esta pintada con los colores de la skin anterior.
+    this.staticLayer = null;
     this.draw();
   }
-  private drawBackground() {
-    const ctx = this.ctx;
+  // Capa estatica pre-renderizada (spec 14, tecnica 2): fondo, cromo del panel
+  // (titulo, etiquetas, leyenda) y marco del tablero con sus 16 celdas vacias
+  // no cambian nunca entre frames — solo al cambiar de skin. Se pintan una vez
+  // en un canvas en memoria (`document.createElement`, no `OffscreenCanvas`:
+  // fallback universal) y cada frame se reponen con un unico `drawImage`.
+  private staticLayer: HTMLCanvasElement | null = null;
+  private getStaticLayer(): HTMLCanvasElement {
+    if (this.staticLayer) return this.staticLayer;
+    const buffer = document.createElement("canvas");
+    buffer.width = W;
+    buffer.height = H;
+    const bctx = buffer.getContext("2d");
+    if (bctx) {
+      this.paintBackground(bctx);
+      this.paintPanelChrome(bctx);
+      this.paintBoardFrame(bctx);
+    }
+    this.staticLayer = buffer;
+    return buffer;
+  }
+  private paintBackground(ctx: CanvasRenderingContext2D) {
     ctx.fillStyle = this.palette.bg;
     ctx.fillRect(0, 0, W, H);
   }
-  private drawPanel() {
-    const ctx = this.ctx;
+  // Solo la parte fija del panel: titulo, etiquetas y leyenda. Los valores,
+  // que cambian cada frame, los pone `drawPanelValues()` sobre el canvas real.
+  private paintPanelChrome(ctx: CanvasRenderingContext2D) {
     const pal = this.palette;
     const x = PANEL_X + 20;
     ctx.textAlign = "left";
@@ -594,30 +633,17 @@ export class Game2048Engine {
     ctx.fillStyle = pal.panelValue;
     ctx.font = `16px ${this.pixelFamily}`;
     ctx.fillText("2048", x, 52);
-    const rows: [string, string][] = [
-      ["PUNTOS", String(this.score)],
-      ["MEJOR FICHA", String(this.maxTile)],
-      ["NIVEL", String(this.level)],
-      ["VIDAS", String(this.lives)],
-      ["MOVIMIENTOS", String(this.moves)],
-    ];
-    let y = 110;
-    for (const [label, value] of rows) {
-      ctx.fillStyle = pal.panelLabel;
-      ctx.font = `12px ${this.monoFamily}`;
-      ctx.fillText(label, x, y);
-      ctx.fillStyle = pal.panelValue;
-      ctx.font = `20px ${this.monoFamily}`;
-      ctx.fillText(value, x, y + 24);
-      y += 66;
+    ctx.fillStyle = pal.panelLabel;
+    ctx.font = `12px ${this.monoFamily}`;
+    for (let i = 0; i < PANEL_LABELS.length; i++) {
+      ctx.fillText(PANEL_LABELS[i], x, PANEL_ROW_Y0 + i * PANEL_ROW_STEP);
     }
     ctx.fillStyle = pal.legend;
     ctx.font = `9px ${this.pixelFamily}`;
     ctx.fillText("FLECHAS", x, H - 54);
     ctx.fillText("MOVER", x, H - 36);
   }
-  private drawBoardFrame() {
-    const ctx = this.ctx;
+  private paintBoardFrame(ctx: CanvasRenderingContext2D) {
     const pal = this.palette;
     ctx.fillStyle = pal.boardFrame;
     ctx.beginPath();
@@ -626,15 +652,32 @@ export class Game2048Engine {
     ctx.strokeStyle = pal.boardBorder;
     ctx.lineWidth = 1;
     ctx.stroke();
+    // Las 16 celdas comparten color: un solo `beginPath()` acumula los 16
+    // `roundRect` y un unico `fill()` los pinta (spec 14, tecnica 1).
     ctx.fillStyle = pal.emptyCell;
+    ctx.beginPath();
     for (let row = 0; row < SIZE; row++) {
       for (let col = 0; col < SIZE; col++) {
         const { x, y } = cellOrigin(row, col);
-        ctx.beginPath();
         ctx.roundRect(x, y, CELL, CELL, 10);
-        ctx.fill();
       }
     }
+    ctx.fill();
+  }
+  // Parte dinamica del panel: los 5 valores comparten fuente y color, asi que
+  // se fijan una sola vez en vez de una por fila.
+  private drawPanelValues() {
+    const ctx = this.ctx;
+    const x = PANEL_X + 20;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = this.palette.panelValue;
+    ctx.font = `20px ${this.monoFamily}`;
+    ctx.fillText(String(this.score), x, PANEL_ROW_Y0 + 24);
+    ctx.fillText(String(this.maxTile), x, PANEL_ROW_Y0 + PANEL_ROW_STEP + 24);
+    ctx.fillText(String(this.level), x, PANEL_ROW_Y0 + 2 * PANEL_ROW_STEP + 24);
+    ctx.fillText(String(this.lives), x, PANEL_ROW_Y0 + 3 * PANEL_ROW_STEP + 24);
+    ctx.fillText(String(this.moves), x, PANEL_ROW_Y0 + 4 * PANEL_ROW_STEP + 24);
   }
   // `scale` (pop de fusion) y `alpha` (aparicion) los usa la animacion del
   // paso 3; aqui todo se dibuja a escala 1 y opacidad 1.
@@ -662,49 +705,115 @@ export class Game2048Engine {
     ctx.fillText(String(value), cx, cy + 1);
     ctx.restore();
   }
+  // Lote de fichas a escala/opacidad normales, agrupadas por valor: mismo
+  // valor = mismo color, mismo shadowBlur, misma fuente y mismo texto, asi que
+  // todas comparten un solo `save`/`shadowBlur`/`beginPath`/`fill`/`restore`
+  // (spec 14, tecnica 1). Los arrays se reutilizan entre frames para no
+  // alocar en el hot path. `roundRect` abre su propio subpath, asi que no
+  // necesita el `moveTo()` previo que si exigen `arc`/`ellipse` encadenados.
+  private tileBatch = new Map<number, number[]>(); // valor -> [x0,y0,x1,y1,...]
+  // Fichas con transform propia (pop de fusion, aparicion): instancias unicas,
+  // fuera del lote — [valor,x,y,scale,alpha] por entrada.
+  private tileSpecials: number[] = [];
+  private pushTile(value: number, x: number, y: number) {
+    let coords = this.tileBatch.get(value);
+    if (!coords) {
+      coords = [];
+      this.tileBatch.set(value, coords);
+    }
+    coords.push(x, y);
+  }
+  private flushTileBatch() {
+    for (const [value, coords] of this.tileBatch) {
+      if (coords.length === 0) continue;
+      this.drawTileBatch(value, coords);
+      coords.length = 0;
+    }
+  }
+  private drawTileBatch(value: number, coords: number[]) {
+    const ctx = this.ctx;
+    const pal = this.palette;
+    const color = tileColor(pal, value);
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = tileShadowBlur(pal, value);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (let i = 0; i < coords.length; i += 2) {
+      ctx.roundRect(coords[i], coords[i + 1], CELL, CELL, 10);
+    }
+    ctx.fill();
+    // Los numeros nunca llevan glow: se apaga una vez por lote, no por ficha.
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = tileTextColor(pal, value);
+    ctx.font = `${tileFontSize(value)}px ${this.pixelFamily}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    const label = String(value);
+    for (let i = 0; i < coords.length; i += 2) {
+      ctx.fillText(label, coords[i] + CELL / 2, coords[i + 1] + CELL / 2 + 1);
+    }
+    ctx.restore();
+  }
+  private flushTileSpecials() {
+    const s = this.tileSpecials;
+    for (let i = 0; i < s.length; i += 5) {
+      this.drawTile(s[i], s[i + 1], s[i + 2], s[i + 3], s[i + 4]);
+    }
+    s.length = 0;
+  }
   private drawTiles() {
     if (this.anim) {
       this.drawTilesAnimating(this.anim);
       return;
     }
-    for (const tile of tilesOf(this.board)) {
+    for (const tile of this.board) {
+      if (!tile) continue;
       const { x, y } = cellOrigin(tile.row, tile.col);
-      this.drawTile(tile.value, x, y);
+      this.pushTile(tile.value, x, y);
     }
+    this.flushTileBatch();
   }
   private drawTilesAnimating(a: AnimState) {
     const slideDone = a.t >= SLIDE_MS;
     const slideP = easeOutCubic(Math.min(a.t / SLIDE_MS, 1));
     const settleU = slideDone ? Math.min((a.t - SLIDE_MS) / SETTLE_MS, 1) : 0;
     // Fichas absorbidas: viajan al destino y desaparecen al terminar el slide.
+    // Se vuelcan en su propio flush para que sigan quedando DEBAJO de las
+    // supervivientes, como antes del batching.
     if (!slideDone) {
       for (const ab of a.absorbed) {
         const origin = a.from.get(ab.id);
         if (!origin) continue;
         const { x, y } = lerpCell(origin, ab.to, slideP);
-        this.drawTile(ab.value, x, y);
+        this.pushTile(ab.value, x, y);
       }
+      this.flushTileBatch();
     }
-    for (const tile of tilesOf(this.board)) {
-      const cell = { row: tile.row, col: tile.col };
+    for (const tile of this.board) {
+      if (!tile) continue;
       if (tile.id === a.spawnedId) {
         const { x, y } = cellOrigin(tile.row, tile.col);
-        this.drawTile(tile.value, x, y, 0.3 + 0.7 * settleU, settleU);
+        this.tileSpecials.push(tile.value, x, y, 0.3 + 0.7 * settleU, settleU);
         continue;
       }
-      const origin = a.from.get(tile.id) ?? cell;
-      const { x, y } = lerpCell(origin, cell, slideP);
+      const origin = a.from.get(tile.id) ?? tile;
+      const { x, y } = lerpCell(origin, tile, slideP);
       const merged = a.mergedIds.has(tile.id);
       if (merged && !slideDone) {
         // Durante el slide la superviviente aun muestra su valor previo.
-        this.drawTile(tile.value / 2, x, y);
+        this.pushTile(tile.value / 2, x, y);
       } else if (merged && slideDone) {
         const pop = 1 + 0.18 * Math.sin(Math.PI * settleU);
-        this.drawTile(tile.value, x, y, pop);
+        this.tileSpecials.push(tile.value, x, y, pop, 1);
       } else {
-        this.drawTile(tile.value, x, y);
+        this.pushTile(tile.value, x, y);
       }
     }
+    this.flushTileBatch();
+    // Las fichas con pop/aparicion se pintan al final: son las que "crecen"
+    // sobre sus vecinas y deben quedar encima.
+    this.flushTileSpecials();
   }
   // Buffer offscreen con las scanlines pre-renderizadas (solo la zona del
   // tablero: el panel lateral debe quedar limpio). El patron no depende de la
@@ -749,9 +858,9 @@ export class Game2048Engine {
     ctx.restore();
   }
   private draw() {
-    this.drawBackground();
-    this.drawPanel();
-    this.drawBoardFrame();
+    // Fondo + cromo del panel + marco y celdas vacias, de una sola vez.
+    this.ctx.drawImage(this.getStaticLayer(), 0, 0);
+    this.drawPanelValues();
     this.drawTiles();
     // Las scanlines van sobre el tablero pero debajo del overlay y del velo de
     // pausa, y nunca sobre el panel lateral, para no restarles legibilidad.
