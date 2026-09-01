@@ -283,6 +283,7 @@ export class Game2048Engine {
   private moves = 0;
   private maxTile = 0;
   private phase: "playing" | "gameover" = "playing";
+  private gameOverNotified = false;
   private paused = false;
   private anim: AnimState | null = null;
   // Buffer de UNA sola pulsacion durante la animacion: se guarda la primera y
@@ -356,20 +357,81 @@ export class Game2048Engine {
     this.bufferedDir = null;
     if (dir) this.applyMove(dir);
   }
+  private triggerGameOver() {
+    if (this.gameOverNotified) return;
+    this.gameOverNotified = true;
+    this.phase = "gameover";
+    this.callbacks.onGameOver(this.score);
+  }
+  private emitStats() {
+    this.callbacks.onStats({
+      score: this.score,
+      lives: this.lives,
+      level: this.level,
+      state: this.phase === "gameover" ? "gameover" : "playing",
+    });
+  }
   private loop = (now: number) => {
     const dt = now - this.lastFrame;
     this.lastFrame = now;
     if (!this.paused && this.anim) {
       this.anim.t += dt;
-      if (this.anim.t >= SLIDE_MS) this.resolveSpawn();
+      if (this.anim.t >= SLIDE_MS && !this.anim.spawnResolved) {
+        this.resolveSpawn();
+        // El bloqueo se comprueba SIEMPRE despues de generar la ficha nueva.
+        if (this.phase === "playing" && isBlocked(this.board)) {
+          this.triggerGameOver();
+        }
+      }
       if (this.anim.t >= SLIDE_MS + SETTLE_MS) {
         this.anim = null;
-        this.flushBuffer();
+        if (this.phase === "playing") this.flushBuffer();
       }
     }
     this.draw();
+    this.emitStats();
     this.rafId = requestAnimationFrame(this.loop);
   };
+  pause(): void {
+    // El rAF sigue vivo para redibujar el overlay de PAUSA; solo se congela el
+    // avance de la animacion y la entrada.
+    this.paused = true;
+  }
+  resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    this.lastFrame = performance.now();
+  }
+  reset(): void {
+    const init = createInitialBoard();
+    this.board = init.board;
+    this.nextId = init.nextId;
+    this.score = 0;
+    this.moves = 0;
+    this.maxTile = maxTileValue(this.board);
+    this.phase = "playing";
+    this.gameOverNotified = false;
+    this.anim = null;
+    this.bufferedDir = null;
+    this.paused = false;
+    this.lastFrame = performance.now();
+    if (this.rafId === null) this.rafId = requestAnimationFrame(this.loop);
+  }
+  forceGameOver(): void {
+    if (this.phase === "gameover") return;
+    this.anim = null;
+    this.bufferedDir = null;
+    this.triggerGameOver();
+    this.draw();
+    this.emitStats();
+  }
+  destroy(): void {
+    if (this.rafId !== null) {
+      cancelAnimationFrame(this.rafId);
+      this.rafId = null;
+    }
+    window.removeEventListener("keydown", this.handleKeyDown);
+  }
   private get level(): number {
     return levelFromMaxTile(this.maxTile);
   }
@@ -499,10 +561,37 @@ export class Game2048Engine {
       }
     }
   }
+  private drawOverlay(title: string, sub: string) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.fillStyle = "rgba(10, 10, 15, 0.72)";
+    ctx.fillRect(BOARD_X, BOARD_Y, BOARD_SIZE, BOARD_SIZE);
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.shadowColor = COL_BOARD_BORDER;
+    ctx.shadowBlur = 18;
+    ctx.fillStyle = "#ff006e";
+    ctx.font = `28px ${this.pixelFamily}`;
+    ctx.fillText(
+      title,
+      BOARD_X + BOARD_SIZE / 2,
+      BOARD_Y + BOARD_SIZE / 2 - 18,
+    );
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = "#e6e9ff";
+    ctx.font = `13px ${this.monoFamily}`;
+    ctx.fillText(sub, BOARD_X + BOARD_SIZE / 2, BOARD_Y + BOARD_SIZE / 2 + 26);
+    ctx.restore();
+  }
   private draw() {
     this.drawBackground();
     this.drawPanel();
     this.drawBoardFrame();
     this.drawTiles();
+    if (this.phase === "gameover") {
+      this.drawOverlay("FIN", `Puntuación: ${this.score}`);
+    } else if (this.paused) {
+      this.drawOverlay("PAUSA", "Pulsa REANUDAR para seguir");
+    }
   }
 }
