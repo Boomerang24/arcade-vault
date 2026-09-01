@@ -1,11 +1,16 @@
 "use client";
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
-import { Game2048Engine, type EngineStats } from "@/lib/games/2048/engine";
+import {
+  Game2048Engine,
+  type EngineStats,
+  type SkinName,
+} from "@/lib/games/2048/engine";
 export type Game2048CanvasHandle = {
   pause: () => void;
   resume: () => void;
   reset: () => void;
   forceGameOver: () => void;
+  setSkin?: (skin: string) => void;
 };
 type Props = {
   onStats: (stats: EngineStats) => void;
@@ -33,6 +38,7 @@ export const Game2048Canvas = forwardRef<Game2048CanvasHandle, Props>(
       resume: () => engineRef.current?.resume(),
       reset: () => engineRef.current?.reset(),
       forceGameOver: () => engineRef.current?.forceGameOver(),
+      setSkin: (skin: string) => engineRef.current?.setSkin(skin as SkinName),
     }));
     return (
       <canvas

@@ -15,6 +15,50 @@ El agente trabaja **un juego por corrida** — nunca recorre el catálogo comple
 | frogger    | ✅      | ✅   | ✅    | —                | 2026-08-17  |
 | sinapsis   | ✅      | ✅   | ✅    | —                | 2026-08-28  |
 | sifon      | ✅      | ✅   | ✅    | —                | 2026-08-31  |
+| 2048       | ✅      | ✅   | ✅    | —                | 2026-09-01  |
+
+## 2048
+
+**Técnica:** paleta por rol semántico (`SKIN_PALETTES: Record<SkinName, Palette>`) en `lib/games/2048/engine.ts`. Juego 100% procedural (sin `public/games/2048/`), así que cada literal pasó a campo de paleta. El motor guarda `private currentSkin` + getter `palette`; `drawBackground`, `drawPanel`, `drawBoardFrame`, `drawTile`, `drawOverlay` y el velo de pausa de `draw()` leen de ahí. El elemento central es la **rampa `tiles`** (14 entradas, índice = `log2(value)`, la 0 nunca se dibuja): cada skin tiene la suya. Como la luminosidad de la rampa no es monótona en `classic`/`neon`, el color del número también es una rampa paralela (`tileTexts`, generada con el helper `textRamp(dark, light, until)`), en vez del `exponente <= 6 ? oscuro : blanco` original. El glow de ficha no es una rama `if (skin === "neon")` sino tres números (`tileBlurBase`/`tileBlurStep`/`tileBlurMax`), porque `classic` **ya tenía glow propio** (`min(4 + exp*2, 30)`) y había que conservarlo exacto. `setSkin()` redibuja sincrónicamente y `draw()` repone por su cuenta el overlay de FIN o el velo de pausa, así que el cambio se ve al instante incluso con la partida pausada o terminada. Selector compartido vía `GAME_REGISTRY["2048"].skins`.
+
+| Rol                    | classic               | neon                | retro               |
+| ---------------------- | --------------------- | ------------------- | ------------------- |
+| bg                     | `#0a0a0f`             | `#06000f`           | `#0a0600`           |
+| panelLabel             | `#8a8fb5`             | `#c800ff`           | `#8a5200`           |
+| panelValue             | `#00f5ff`             | `#00f5ff`           | `#ffb000`           |
+| boardFrame             | `#0f0f18`             | `#0b0018`           | `#140c00`           |
+| boardBorder            | `#00f5ff`             | `#c800ff`           | `#ffb000`           |
+| emptyCell              | `#15151f`             | `#16002e`           | `#1f1400`           |
+| legend                 | `#4a4f70`             | `#7a00b0`           | `#8a5200`           |
+| ficha 2 (exp 1)        | `#00c8d0`             | `#00d5ff`           | `#5a3400`           |
+| ficha 4 (exp 2)        | `#00f5ff`             | `#00f5ff`           | `#7a4700`           |
+| ficha 8 (exp 3)        | `#00e0a8`             | `#00ffc8`           | `#8f5400`           |
+| ficha 16 (exp 4)       | `#00ff88`             | `#00ff88`           | `#a66200`           |
+| ficha 32 (exp 5)       | `#9bf53a`             | `#aaff00`           | `#bd7100`           |
+| ficha 64 (exp 6)       | `#f5ff00`             | `#f5ff00`           | `#d18000`           |
+| ficha 128 (exp 7)      | `#ffc400`             | `#ffb300`           | `#e08e00`           |
+| ficha 256 (exp 8)      | `#ff8a3d`             | `#ff6a00`           | `#ef9d00`           |
+| ficha 512 (exp 9)      | `#ff5da0`             | `#ff2d78`           | `#ffb000`           |
+| ficha 1024 (exp 10)    | `#ff2f96`             | `#ff006e`           | `#ffc133`           |
+| ficha 2048 (exp 11)    | `#ff006e`             | `#ff00c8`           | `#ffd166`           |
+| ficha 4096 (exp 12)    | `#ff4fb0`             | `#c800ff`           | `#ffe099`           |
+| ficha 8192+ (exp 13)   | `#ff7dc8`             | `#9d4dff`           | `#ffeecc`           |
+| texto ficha (oscuro)   | `#0a0a0f` (exp ≤ 6)   | `#06000f` (exp ≤ 8) | `#0a0600` (exp ≥ 6) |
+| texto ficha (claro)    | `#ffffff` (exp ≥ 7)   | `#ffffff` (exp ≥ 9) | `#ffd280` (exp ≤ 5) |
+| glow ficha (base/step) | 4 / 2 (máx 30)        | 10 / 3 (máx 44)     | 0 / 0 (máx 0)       |
+| overlayVeil            | `rgba(10,10,15,0.72)` | `rgba(6,0,15,0.75)` | `rgba(10,6,0,0.75)` |
+| overlayGlow / blur     | `#00f5ff` / 18        | `#ff006e` / 28      | `#ffb000` / 0       |
+| overlayTitle           | `#ff006e`             | `#ff006e`           | `#ffb000`           |
+| overlaySub             | `#e6e9ff`             | `#00f5ff`           | `#ffd280`           |
+| pauseVeil              | `rgba(10,10,15,0.55)` | `rgba(6,0,15,0.58)` | `rgba(10,6,0,0.58)` |
+
+**Estilo por skin:**
+
+- `classic`: literales originales exactos (fondo `#0a0a0f`, marco `#0f0f18` con borde cian, celdas vacías `#15151f`, panel `#8a8fb5`/`#00f5ff`, leyenda `#4a4f70`, rampa cian → verde → amarillo → magenta, glow `min(4 + exp*2, 30)`, overlay magenta con glow cian sobre velo al 72%). Sin scanlines.
+- `neon`: marco y etiquetas violeta (`#c800ff`) sobre negro púrpura, rampa más saturada que remata en violeta (`#ff00c8` → `#c800ff` → `#9d4dff`) en vez de rosa pálido, glow de ficha ~2.5x (`min(10 + exp*3, 44)`), overlay magenta con blur 28 y subtítulo cian.
+- `retro`: monocromo ámbar CRT sobre negro cálido, sin glow, con scanlines horizontales (`rgba(0,0,0,0.22)` cada 3px, buffer offscreen cacheado) dibujadas sobre el tablero pero **debajo** del overlay/velo de pausa y **nunca sobre el panel lateral**, para que puntos/mejor ficha/nivel/movimientos sigan legibles.
+
+**Notas:** en `retro` la rampa de fichas es de luminancia pura (`#5a3400` → `#ffeecc`, 13 escalones), que aquí funciona mejor que en otros juegos porque **cada ficha lleva su número escrito encima**: el color nunca fue el discriminante de la mecánica, solo un refuerzo de "cuán grande es". Por eso el color del texto también se invierte respecto de `classic`: claro (`#ffd280`) sobre los escalones oscuros (exp ≤ 5) y oscuro (`#0a0600`) sobre los brillantes. Se eligió ámbar y no verde fósforo porque la rampa `classic` ya recorre el verde (`#00ff88`, `#9bf53a`). El velo de pausa y el overlay de FIN cubren solo el rect del tablero (el panel lateral queda visible), igual que antes del refactor. Cero cambios de mecánica: `slide`, `spawnTile`, `isBlocked`, `SLIDE_MS`/`SETTLE_MS`, el buffer de una pulsación y la puntuación quedaron intactos — el glow no afecta a nada porque el juego es por turnos sobre una rejilla y no hay colisiones por píxel. No se añadió ningún asset a `public/games/`.
 
 ## sifon
 

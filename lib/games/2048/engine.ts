@@ -195,16 +195,40 @@ const BOARD_SIZE = 528;
 const BOARD_PAD = 16;
 const CELL_GAP = 16;
 const CELL = 112; // 16 + 4*112 + 3*16 + 16 = 528
-const COL_BG = "#0a0a0f";
-const COL_PANEL_LABEL = "#8a8fb5";
-const COL_PANEL_VALUE = "#00f5ff";
-const COL_BOARD_FRAME = "#0f0f18";
-const COL_BOARD_BORDER = "#00f5ff";
-const COL_EMPTY_CELL = "#15151f";
-const COL_LEGEND = "#4a4f70";
-// Rampa de color por exponente (indice = log2(value)): cyan -> green ->
-// yellow -> magenta, subiendo en luminosidad con el valor.
-const TILE_COLORS = [
+// ---------------------------------------------------------------------------
+// Skins: toda decision de color vive en `SKIN_PALETTES`, indexada por rol
+// semantico. Los parametros de estilo (intensidad del glow de ficha,
+// scanlines) tambien son campos de la paleta y no ramas `if (skin === ...)`,
+// porque `classic` YA tenia glow propio y hay que conservarlo exacto.
+// ---------------------------------------------------------------------------
+export type SkinName = "classic" | "neon" | "retro";
+export type Palette = {
+  bg: string;
+  panelLabel: string;
+  panelValue: string;
+  boardFrame: string;
+  boardBorder: string;
+  emptyCell: string;
+  legend: string;
+  // Rampa de color por exponente (indice = log2(value)); 14 entradas, la 0
+  // corresponde a una celda vacia y nunca se dibuja como ficha.
+  tiles: string[];
+  // Color del numero, en paralelo a `tiles`: depende de la luminosidad del
+  // relleno de ese escalon, que no es monotona en `classic`/`neon`.
+  tileTexts: string[];
+  // shadowBlur de ficha = min(base + exponente * step, max).
+  tileBlurBase: number;
+  tileBlurStep: number;
+  tileBlurMax: number;
+  overlayVeil: string;
+  overlayGlow: string;
+  overlayBlur: number;
+  overlayTitle: string;
+  overlaySub: string;
+  pauseVeil: string;
+  scanlines: boolean;
+};
+const CLASSIC_TILES = [
   "#0a0a0f",
   "#00c8d0",
   "#00f5ff",
@@ -220,17 +244,123 @@ const TILE_COLORS = [
   "#ff4fb0",
   "#ff7dc8",
 ];
+// Helper para las rampas de texto: `dark` hasta el exponente `until`, `light`
+// a partir de ahi (equivale al `exponente <= 6 ? oscuro : blanco` original).
+function textRamp(dark: string, light: string, until: number): string[] {
+  return CLASSIC_TILES.map((_, i) => (i <= until ? dark : light));
+}
+export const SKIN_PALETTES: Record<SkinName, Palette> = {
+  classic: {
+    bg: "#0a0a0f",
+    panelLabel: "#8a8fb5",
+    panelValue: "#00f5ff",
+    boardFrame: "#0f0f18",
+    boardBorder: "#00f5ff",
+    emptyCell: "#15151f",
+    legend: "#4a4f70",
+    // cyan -> green -> yellow -> magenta, subiendo en luminosidad con el valor.
+    tiles: CLASSIC_TILES,
+    tileTexts: textRamp("#0a0a0f", "#ffffff", 6),
+    tileBlurBase: 4,
+    tileBlurStep: 2,
+    tileBlurMax: 30,
+    overlayVeil: "rgba(10, 10, 15, 0.72)",
+    overlayGlow: "#00f5ff",
+    overlayBlur: 18,
+    overlayTitle: "#ff006e",
+    overlaySub: "#e6e9ff",
+    pauseVeil: "rgba(10, 10, 15, 0.55)",
+    scanlines: false,
+  },
+  neon: {
+    bg: "#06000f",
+    panelLabel: "#c800ff",
+    panelValue: "#00f5ff",
+    boardFrame: "#0b0018",
+    boardBorder: "#c800ff",
+    emptyCell: "#16002e",
+    legend: "#7a00b0",
+    tiles: [
+      "#06000f",
+      "#00d5ff",
+      "#00f5ff",
+      "#00ffc8",
+      "#00ff88",
+      "#aaff00",
+      "#f5ff00",
+      "#ffb300",
+      "#ff6a00",
+      "#ff2d78",
+      "#ff006e",
+      "#ff00c8",
+      "#c800ff",
+      "#9d4dff",
+    ],
+    tileTexts: textRamp("#06000f", "#ffffff", 8),
+    tileBlurBase: 10,
+    tileBlurStep: 3,
+    tileBlurMax: 44,
+    overlayVeil: "rgba(6, 0, 15, 0.75)",
+    overlayGlow: "#ff006e",
+    overlayBlur: 28,
+    overlayTitle: "#ff006e",
+    overlaySub: "#00f5ff",
+    pauseVeil: "rgba(6, 0, 15, 0.58)",
+    scanlines: false,
+  },
+  retro: {
+    bg: "#0a0600",
+    panelLabel: "#8a5200",
+    panelValue: "#ffb000",
+    boardFrame: "#140c00",
+    boardBorder: "#ffb000",
+    emptyCell: "#1f1400",
+    legend: "#8a5200",
+    // Monocromo ambar: el escalon de la ficha se lee por luminancia, de ambar
+    // apagado (2) a ambar casi blanco (8192+).
+    tiles: [
+      "#0a0600",
+      "#5a3400",
+      "#7a4700",
+      "#8f5400",
+      "#a66200",
+      "#bd7100",
+      "#d18000",
+      "#e08e00",
+      "#ef9d00",
+      "#ffb000",
+      "#ffc133",
+      "#ffd166",
+      "#ffe099",
+      "#ffeecc",
+    ],
+    tileTexts: textRamp("#ffd280", "#0a0600", 5),
+    tileBlurBase: 0,
+    tileBlurStep: 0,
+    tileBlurMax: 0,
+    overlayVeil: "rgba(10, 6, 0, 0.75)",
+    overlayGlow: "#ffb000",
+    overlayBlur: 0,
+    overlayTitle: "#ffb000",
+    overlaySub: "#ffd280",
+    pauseVeil: "rgba(10, 6, 0, 0.58)",
+    scanlines: true,
+  },
+};
 function tileExponent(value: number): number {
   return Math.max(1, Math.round(Math.log2(value)));
 }
-function tileColor(value: number): string {
-  return TILE_COLORS[Math.min(tileExponent(value), TILE_COLORS.length - 1)];
+function tileColor(pal: Palette, value: number): string {
+  return pal.tiles[Math.min(tileExponent(value), pal.tiles.length - 1)];
 }
-function tileShadowBlur(value: number): number {
-  return Math.min(4 + tileExponent(value) * 2, 30);
+function tileShadowBlur(pal: Palette, value: number): number {
+  return Math.min(
+    pal.tileBlurBase + tileExponent(value) * pal.tileBlurStep,
+    pal.tileBlurMax,
+  );
 }
-function tileTextColor(value: number): string {
-  return tileExponent(value) <= 6 ? "#0a0a0f" : "#ffffff";
+function tileTextColor(pal: Palette, value: number): string {
+  return pal.tileTexts[Math.min(tileExponent(value), pal.tileTexts.length - 1)];
 }
 // Tamano de fuente por tramos de digitos: 1-2, 3, 4, 5+.
 function tileFontSize(value: number): number {
@@ -293,6 +423,10 @@ export class Game2048Engine {
   private lastFrame = 0;
   private pixelFamily = '"Press Start 2P", monospace';
   private monoFamily = '"Courier New", monospace';
+  private currentSkin: SkinName = "classic";
+  private get palette(): Palette {
+    return SKIN_PALETTES[this.currentSkin];
+  }
   constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
     const ctx = canvas.getContext("2d");
     if (!ctx) throw new Error("No se pudo obtener el contexto 2D del canvas");
@@ -438,17 +572,26 @@ export class Game2048Engine {
   private get lives(): number {
     return this.phase === "gameover" ? 0 : 1;
   }
+  // Cambia la skin y redibuja SINCRONICAMENTE: `draw()` repone por si solo el
+  // overlay de FIN o el velo de pausa, asi que el cambio se ve al instante
+  // incluso con el juego pausado o terminado (el rAF podria estar congelado).
+  setSkin(skin: SkinName): void {
+    if (!(skin in SKIN_PALETTES) || skin === this.currentSkin) return;
+    this.currentSkin = skin;
+    this.draw();
+  }
   private drawBackground() {
     const ctx = this.ctx;
-    ctx.fillStyle = COL_BG;
+    ctx.fillStyle = this.palette.bg;
     ctx.fillRect(0, 0, W, H);
   }
   private drawPanel() {
     const ctx = this.ctx;
+    const pal = this.palette;
     const x = PANEL_X + 20;
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
-    ctx.fillStyle = COL_PANEL_VALUE;
+    ctx.fillStyle = pal.panelValue;
     ctx.font = `16px ${this.pixelFamily}`;
     ctx.fillText("2048", x, 52);
     const rows: [string, string][] = [
@@ -460,29 +603,30 @@ export class Game2048Engine {
     ];
     let y = 110;
     for (const [label, value] of rows) {
-      ctx.fillStyle = COL_PANEL_LABEL;
+      ctx.fillStyle = pal.panelLabel;
       ctx.font = `12px ${this.monoFamily}`;
       ctx.fillText(label, x, y);
-      ctx.fillStyle = COL_PANEL_VALUE;
+      ctx.fillStyle = pal.panelValue;
       ctx.font = `20px ${this.monoFamily}`;
       ctx.fillText(value, x, y + 24);
       y += 66;
     }
-    ctx.fillStyle = COL_LEGEND;
+    ctx.fillStyle = pal.legend;
     ctx.font = `9px ${this.pixelFamily}`;
     ctx.fillText("FLECHAS", x, H - 54);
     ctx.fillText("MOVER", x, H - 36);
   }
   private drawBoardFrame() {
     const ctx = this.ctx;
-    ctx.fillStyle = COL_BOARD_FRAME;
+    const pal = this.palette;
+    ctx.fillStyle = pal.boardFrame;
     ctx.beginPath();
     ctx.roundRect(BOARD_X, BOARD_Y, BOARD_SIZE, BOARD_SIZE, 12);
     ctx.fill();
-    ctx.strokeStyle = COL_BOARD_BORDER;
+    ctx.strokeStyle = pal.boardBorder;
     ctx.lineWidth = 1;
     ctx.stroke();
-    ctx.fillStyle = COL_EMPTY_CELL;
+    ctx.fillStyle = pal.emptyCell;
     for (let row = 0; row < SIZE; row++) {
       for (let col = 0; col < SIZE; col++) {
         const { x, y } = cellOrigin(row, col);
@@ -496,6 +640,7 @@ export class Game2048Engine {
   // paso 3; aqui todo se dibuja a escala 1 y opacidad 1.
   private drawTile(value: number, x: number, y: number, scale = 1, alpha = 1) {
     const ctx = this.ctx;
+    const pal = this.palette;
     ctx.save();
     ctx.globalAlpha = alpha;
     const cx = x + CELL / 2;
@@ -503,14 +648,14 @@ export class Game2048Engine {
     ctx.translate(cx, cy);
     ctx.scale(scale, scale);
     ctx.translate(-cx, -cy);
-    ctx.shadowColor = tileColor(value);
-    ctx.shadowBlur = tileShadowBlur(value);
-    ctx.fillStyle = tileColor(value);
+    ctx.shadowColor = tileColor(pal, value);
+    ctx.shadowBlur = tileShadowBlur(pal, value);
+    ctx.fillStyle = tileColor(pal, value);
     ctx.beginPath();
     ctx.roundRect(x, y, CELL, CELL, 10);
     ctx.fill();
     ctx.shadowBlur = 0;
-    ctx.fillStyle = tileTextColor(value);
+    ctx.fillStyle = tileTextColor(pal, value);
     ctx.font = `${tileFontSize(value)}px ${this.pixelFamily}`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -561,16 +706,36 @@ export class Game2048Engine {
       }
     }
   }
+  // Buffer offscreen con las scanlines pre-renderizadas (solo la zona del
+  // tablero: el panel lateral debe quedar limpio). El patron no depende de la
+  // skin, asi que se cachea para toda la vida del engine.
+  private scanlinesBuffer: HTMLCanvasElement | null = null;
+  private drawScanlines() {
+    if (!this.scanlinesBuffer) {
+      const buffer = document.createElement("canvas");
+      buffer.width = BOARD_SIZE;
+      buffer.height = BOARD_SIZE;
+      const bctx = buffer.getContext("2d");
+      if (bctx) {
+        bctx.fillStyle = "rgba(0,0,0,0.22)";
+        for (let y = 0; y < BOARD_SIZE; y += 3)
+          bctx.fillRect(0, y, BOARD_SIZE, 1);
+      }
+      this.scanlinesBuffer = buffer;
+    }
+    this.ctx.drawImage(this.scanlinesBuffer, BOARD_X, BOARD_Y);
+  }
   private drawOverlay(title: string, sub: string) {
     const ctx = this.ctx;
+    const pal = this.palette;
     ctx.save();
-    ctx.fillStyle = "rgba(10, 10, 15, 0.72)";
+    ctx.fillStyle = pal.overlayVeil;
     ctx.fillRect(BOARD_X, BOARD_Y, BOARD_SIZE, BOARD_SIZE);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-    ctx.shadowColor = COL_BOARD_BORDER;
-    ctx.shadowBlur = 18;
-    ctx.fillStyle = "#ff006e";
+    ctx.shadowColor = pal.overlayGlow;
+    ctx.shadowBlur = pal.overlayBlur;
+    ctx.fillStyle = pal.overlayTitle;
     ctx.font = `28px ${this.pixelFamily}`;
     ctx.fillText(
       title,
@@ -578,7 +743,7 @@ export class Game2048Engine {
       BOARD_Y + BOARD_SIZE / 2 - 18,
     );
     ctx.shadowBlur = 0;
-    ctx.fillStyle = "#e6e9ff";
+    ctx.fillStyle = pal.overlaySub;
     ctx.font = `13px ${this.monoFamily}`;
     ctx.fillText(sub, BOARD_X + BOARD_SIZE / 2, BOARD_Y + BOARD_SIZE / 2 + 26);
     ctx.restore();
@@ -588,12 +753,15 @@ export class Game2048Engine {
     this.drawPanel();
     this.drawBoardFrame();
     this.drawTiles();
+    // Las scanlines van sobre el tablero pero debajo del overlay y del velo de
+    // pausa, y nunca sobre el panel lateral, para no restarles legibilidad.
+    if (this.palette.scanlines) this.drawScanlines();
     if (this.phase === "gameover") {
       this.drawOverlay("FIN", `Puntuación: ${this.score}`);
     } else if (this.paused) {
       // Solo un velo: el texto "EN PAUSA" lo pone jugar-client encima.
       const ctx = this.ctx;
-      ctx.fillStyle = "rgba(10, 10, 15, 0.55)";
+      ctx.fillStyle = this.palette.pauseVeil;
       ctx.fillRect(BOARD_X, BOARD_Y, BOARD_SIZE, BOARD_SIZE);
     }
   }

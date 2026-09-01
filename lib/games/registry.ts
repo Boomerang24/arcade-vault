@@ -127,7 +127,14 @@ export const GAME_REGISTRY: Record<string, RegisteredGame> = {
     ],
     touchActions: [{ code: "Space", label: "DISPARAR" }],
   },
-  "2048": { Canvas: Game2048Canvas },
+  "2048": {
+    Canvas: Game2048Canvas,
+    skins: [
+      { id: "classic", label: "Classic" },
+      { id: "neon", label: "Neon" },
+      { id: "retro", label: "Retro" },
+    ],
+  },
 };
 export function getRegisteredGame(id: string): RegisteredGame | undefined {
   return GAME_REGISTRY[id];
