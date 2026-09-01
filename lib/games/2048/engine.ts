@@ -180,3 +180,192 @@ export function createInitialBoard(startId = 1): {
   }
   return { board, nextId };
 }
+// ---------------------------------------------------------------------------
+// Render (paso 2): dibujo 100% procedural sobre un canvas de 800x600, mismo
+// tamaño que Asteroides/Arkanoid/Snake/Sifon. La animacion de deslizamiento,
+// la entrada de teclado y el ciclo de vida completo llegan en pasos 3 y 4.
+// ---------------------------------------------------------------------------
+const W = 800;
+const H = 600;
+const PANEL_X = 0;
+const BOARD_X = 236;
+const BOARD_Y = 36;
+const BOARD_SIZE = 528;
+const BOARD_PAD = 16;
+const CELL_GAP = 16;
+const CELL = 112; // 16 + 4*112 + 3*16 + 16 = 528
+const COL_BG = "#0a0a0f";
+const COL_PANEL_LABEL = "#8a8fb5";
+const COL_PANEL_VALUE = "#00f5ff";
+const COL_BOARD_FRAME = "#0f0f18";
+const COL_BOARD_BORDER = "#00f5ff";
+const COL_EMPTY_CELL = "#15151f";
+const COL_LEGEND = "#4a4f70";
+// Rampa de color por exponente (indice = log2(value)): cyan -> green ->
+// yellow -> magenta, subiendo en luminosidad con el valor.
+const TILE_COLORS = [
+  "#0a0a0f",
+  "#00c8d0",
+  "#00f5ff",
+  "#00e0a8",
+  "#00ff88",
+  "#9bf53a",
+  "#f5ff00",
+  "#ffc400",
+  "#ff8a3d",
+  "#ff5da0",
+  "#ff2f96",
+  "#ff006e",
+  "#ff4fb0",
+  "#ff7dc8",
+];
+function tileExponent(value: number): number {
+  return Math.max(1, Math.round(Math.log2(value)));
+}
+function tileColor(value: number): string {
+  return TILE_COLORS[Math.min(tileExponent(value), TILE_COLORS.length - 1)];
+}
+function tileShadowBlur(value: number): number {
+  return Math.min(4 + tileExponent(value) * 2, 30);
+}
+function tileTextColor(value: number): string {
+  return tileExponent(value) <= 6 ? "#0a0a0f" : "#ffffff";
+}
+// Tamano de fuente por tramos de digitos: 1-2, 3, 4, 5+.
+function tileFontSize(value: number): number {
+  if (value < 100) return 30;
+  if (value < 1000) return 24;
+  if (value < 10000) return 19;
+  return 15;
+}
+function cellOrigin(row: number, col: number): { x: number; y: number } {
+  return {
+    x: BOARD_X + BOARD_PAD + col * (CELL + CELL_GAP),
+    y: BOARD_Y + BOARD_PAD + row * (CELL + CELL_GAP),
+  };
+}
+export class Game2048Engine {
+  private ctx: CanvasRenderingContext2D;
+  private callbacks: EngineCallbacks;
+  private board: Board;
+  private nextId: number;
+  private score = 0;
+  private moves = 0;
+  private maxTile = 0;
+  private phase: "playing" | "gameover" = "playing";
+  private pixelFamily = '"Press Start 2P", monospace';
+  private monoFamily = '"Courier New", monospace';
+  constructor(canvas: HTMLCanvasElement, callbacks: EngineCallbacks) {
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("No se pudo obtener el contexto 2D del canvas");
+    this.ctx = ctx;
+    this.callbacks = callbacks;
+    const cs = getComputedStyle(canvas);
+    const pixel = cs.getPropertyValue("--font-pixel").trim();
+    const mono = cs.getPropertyValue("--font-courier-prime").trim();
+    if (pixel) this.pixelFamily = `${pixel}, "Press Start 2P", monospace`;
+    if (mono) this.monoFamily = `${mono}, "Courier New", monospace`;
+    const init = createInitialBoard();
+    this.board = init.board;
+    this.nextId = init.nextId;
+    this.maxTile = maxTileValue(this.board);
+    this.draw();
+  }
+  private get level(): number {
+    return levelFromMaxTile(this.maxTile);
+  }
+  private get lives(): number {
+    return this.phase === "gameover" ? 0 : 1;
+  }
+  private drawBackground() {
+    const ctx = this.ctx;
+    ctx.fillStyle = COL_BG;
+    ctx.fillRect(0, 0, W, H);
+  }
+  private drawPanel() {
+    const ctx = this.ctx;
+    const x = PANEL_X + 20;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = COL_PANEL_VALUE;
+    ctx.font = `16px ${this.pixelFamily}`;
+    ctx.fillText("2048", x, 52);
+    const rows: [string, string][] = [
+      ["PUNTOS", String(this.score)],
+      ["MEJOR FICHA", String(this.maxTile)],
+      ["NIVEL", String(this.level)],
+      ["VIDAS", String(this.lives)],
+      ["MOVIMIENTOS", String(this.moves)],
+    ];
+    let y = 110;
+    for (const [label, value] of rows) {
+      ctx.fillStyle = COL_PANEL_LABEL;
+      ctx.font = `12px ${this.monoFamily}`;
+      ctx.fillText(label, x, y);
+      ctx.fillStyle = COL_PANEL_VALUE;
+      ctx.font = `20px ${this.monoFamily}`;
+      ctx.fillText(value, x, y + 24);
+      y += 66;
+    }
+    ctx.fillStyle = COL_LEGEND;
+    ctx.font = `9px ${this.pixelFamily}`;
+    ctx.fillText("FLECHAS", x, H - 54);
+    ctx.fillText("MOVER", x, H - 36);
+  }
+  private drawBoardFrame() {
+    const ctx = this.ctx;
+    ctx.fillStyle = COL_BOARD_FRAME;
+    ctx.beginPath();
+    ctx.roundRect(BOARD_X, BOARD_Y, BOARD_SIZE, BOARD_SIZE, 12);
+    ctx.fill();
+    ctx.strokeStyle = COL_BOARD_BORDER;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = COL_EMPTY_CELL;
+    for (let row = 0; row < SIZE; row++) {
+      for (let col = 0; col < SIZE; col++) {
+        const { x, y } = cellOrigin(row, col);
+        ctx.beginPath();
+        ctx.roundRect(x, y, CELL, CELL, 10);
+        ctx.fill();
+      }
+    }
+  }
+  // `scale` (pop de fusion) y `alpha` (aparicion) los usa la animacion del
+  // paso 3; aqui todo se dibuja a escala 1 y opacidad 1.
+  private drawTile(value: number, x: number, y: number, scale = 1, alpha = 1) {
+    const ctx = this.ctx;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    const cx = x + CELL / 2;
+    const cy = y + CELL / 2;
+    ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
+    ctx.translate(-cx, -cy);
+    ctx.shadowColor = tileColor(value);
+    ctx.shadowBlur = tileShadowBlur(value);
+    ctx.fillStyle = tileColor(value);
+    ctx.beginPath();
+    ctx.roundRect(x, y, CELL, CELL, 10);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = tileTextColor(value);
+    ctx.font = `${tileFontSize(value)}px ${this.pixelFamily}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(String(value), cx, cy + 1);
+    ctx.restore();
+  }
+  private drawTiles() {
+    for (const tile of tilesOf(this.board)) {
+      const { x, y } = cellOrigin(tile.row, tile.col);
+      this.drawTile(tile.value, x, y);
+    }
+  }
+  private draw() {
+    this.drawBackground();
+    this.drawPanel();
+    this.drawBoardFrame();
+    this.drawTiles();
+  }
+}
