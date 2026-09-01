@@ -27,6 +27,10 @@ import {
   SifonCanvas,
   type SifonCanvasHandle,
 } from "@/components/games/sifon-canvas";
+import {
+  Game2048Canvas,
+  type Game2048CanvasHandle,
+} from "@/components/games/2048-canvas";
 export type EngineStats = {
   score: number;
   lives: number;
@@ -123,6 +127,7 @@ export const GAME_REGISTRY: Record<string, RegisteredGame> = {
     ],
     touchActions: [{ code: "Space", label: "DISPARAR" }],
   },
+  "2048": { Canvas: Game2048Canvas },
 };
 export function getRegisteredGame(id: string): RegisteredGame | undefined {
   return GAME_REGISTRY[id];
@@ -137,4 +142,5 @@ export type {
   FroggerCanvasHandle,
   SinapsisCanvasHandle,
   SifonCanvasHandle,
+  Game2048CanvasHandle,
 };
