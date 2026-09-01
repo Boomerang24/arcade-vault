@@ -15,6 +15,7 @@ El agente trabaja **un juego por corrida** — nunca recorre el catálogo comple
 | frogger    | ↑ ↓ ← → | —                | ✅            | 2026-08-17  |
 | sinapsis   | ↑ ↓ ← → | SONDEAR (Space)  | ✅            | 2026-08-28  |
 | sifon      | ↑ ↓ ← → | DISPARAR (Space) | ✅            | 2026-08-31  |
+| 2048       | ↑ ↓ ← → | —                | ✅            | 2026-09-01  |
 
 ## asteroides
 
@@ -71,3 +72,15 @@ El agente trabaja **un juego por corrida** — nunca recorre el catálogo comple
 - **Vidas como 3 puntos (círculos llenos/vacíos), no como texto `VIDAS: N`.** Misma excepción consciente que `asteroides`/`frogger`/`sinapsis`: el texto fue una decisión de la spec 12 para motores que _no_ tenían HUD.
 - Canvas único 800×600 sin clases propias — cae bajo `.crt-screen canvas { max-width: 100%; height: auto }` (`app/globals.css:1091`), sin reglas nuevas bajo `pointer: coarse`.
 - Cambios de esta corrida: `touchActions` en `GAME_REGISTRY.sifon` y la fila en `TOUCH_DIRECTIONS`. Nada más.
+
+## 2048
+
+**Mapeo:** las 4 flechas ejecutan un movimiento de tablero (`KEY_TO_DIR`, `lib/games/2048/engine.ts:392-397`; `handleKeyDown` en `engine.ts:448`). Sin botones de acción — el motor **solo** escucha `ArrowUp/Down/Left/Right`, no `Space`, así que `touchActions` se omite del registro (mismo caso que `arkanoid`/`snake`/`frogger`).
+**Notas:**
+
+- **Único cambio de esta corrida: la fila en `TOUCH_DIRECTIONS` de `jugar-client.tsx`** (clave entrecomillada, `"2048"`, por empezar con dígito). Ni motor, ni registro, ni CSS.
+- **HUD ya existía** desde la implementación de la spec 21: `drawPanel()` (`engine.ts:588`, invocado por frame desde `draw()` en `engine.ts:753`) dibuja el panel izquierdo con PUNTOS / MEJOR FICHA / NIVEL / VIDAS / MOVIMIENTOS más la leyenda "FLECHAS MOVER". Verificado, no asumido. El patrón spec 12 exige un HUD en vivo dibujado por frame, no un método llamado literalmente `drawHUD()` — el panel actual cumple, así que **no se tocó el motor**.
+- **Vidas ya como texto (`VIDAS` + valor)**, coincidiendo con el formato que la spec 12 pidió para `arkanoid`/`snake`, sin necesidad de cambio.
+- **Juego por turnos vs. auto-repeat:** el motor acepta un movimiento por pulsación y bufferea **una sola** durante la animación (`SLIDE_MS` 110 + `SETTLE_MS` 90 ≈ 200ms, `engine.ts:453-456`). El repeat de 300/80ms de `TouchControls` reenvía `keydown`, así que mantener presionada una flecha encadena movimientos a ritmo de animación (sin duplicarlos: las pulsaciones sobrantes se descartan) — mismo comportamiento que mantener la tecla física.
+- **Un movimiento inválido (ni desplazamiento ni fusión) no consume turno** (`applyMove`, `engine.ts:463`), así que una flecha "sin efecto" contra un borde simplemente no hace nada, también en táctil.
+- Canvas único 800×600, posicionado en absoluto al 100% dentro de `.crt-screen` con borde cyan inline propio — escala solo, sin necesitar reglas nuevas bajo `pointer: coarse`. El wrapper `components/games/2048-canvas.tsx` no se tocó.

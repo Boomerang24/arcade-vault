@@ -22,6 +22,7 @@ const TOUCH_DIRECTIONS: Record<
   frogger: { up: true, down: true, left: true, right: true },
   sinapsis: { up: true, down: true, left: true, right: true },
   sifon: { up: true, down: true, left: true, right: true },
+  "2048": { up: true, down: true, left: true, right: true },
 };
 export function JugarClient({ game }: { game: Game }) {
   const router = useRouter();
