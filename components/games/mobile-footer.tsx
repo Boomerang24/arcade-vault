@@ -6,6 +6,9 @@ export type MobileFooterProps = {
   skin?: string;
   onSkinChange?: (id: string) => void;
   onExit: () => void;
+  touchMode?: "gamepad" | "gestures";
+  onToggleTouchMode?: () => void;
+  gesturesAvailable?: boolean;
 };
 export function MobileFooter({
   paused,
@@ -14,12 +17,20 @@ export function MobileFooter({
   skin,
   onSkinChange,
   onExit,
+  touchMode,
+  onToggleTouchMode,
+  gesturesAvailable,
 }: MobileFooterProps) {
   return (
     <div className="mobile-footer">
       <button className="btn yellow" onClick={onTogglePause}>
         {paused ? "REANUDAR" : "PAUSA"}
       </button>
+      {gesturesAvailable ? (
+        <button className="btn" onClick={onToggleTouchMode}>
+          {touchMode === "gestures" ? "GESTOS" : "GAMEPAD"}
+        </button>
+      ) : null}
       {skins?.length ? (
         <select
           aria-label="Skin"
