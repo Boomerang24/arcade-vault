@@ -75,6 +75,7 @@ export function JugarClient({ game }: { game: Game }) {
   const gestureMap = GESTURE_CONFIG[game.id];
   const touchModeStorageKey = `av_touch_mode_${game.id}`;
   const [touchMode, setTouchMode] = useState<TouchMode>("gestures");
+  const gesturesActive = !!gestureMap && touchMode === "gestures";
   const level = registered ? engineLevel : Math.floor(score / 2500) + 1;
   const name = user ? user.name : "INVITADO";
   useEffect(() => {
@@ -221,6 +222,9 @@ export function JugarClient({ game }: { game: Game }) {
               <div className="player-ship" />
             </div>
           )}
+          {registered && gesturesActive && (
+            <TouchGestures map={gestureMap} disabled={paused || over} />
+          )}
           {paused && (
             <div
               className="crt-content"
@@ -258,8 +262,11 @@ export function JugarClient({ game }: { game: Game }) {
         skin={skin}
         onSkinChange={handleSkinChange}
         onExit={() => router.push(`/juego/${game.id}`)}
+        gesturesAvailable={!!gestureMap}
+        touchMode={touchMode}
+        onToggleTouchMode={handleToggleTouchMode}
       />
-      {registered && (
+      {registered && !gesturesActive && (
         <TouchControls
           actions={registered.touchActions ?? []}
           directions={TOUCH_DIRECTIONS[game.id]}
