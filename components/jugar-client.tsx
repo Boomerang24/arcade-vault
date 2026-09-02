@@ -10,6 +10,10 @@ import {
 } from "@/lib/games/registry";
 import { MobileFooter } from "@/components/games/mobile-footer";
 import { TouchControls } from "@/components/games/touch-controls";
+import {
+  TouchGestures,
+  type GestureMap,
+} from "@/components/games/touch-gestures";
 // D-pad relevante por juego, según el mapeo de controles de la spec 12.
 const TOUCH_DIRECTIONS: Record<
   string,
@@ -23,6 +27,35 @@ const TOUCH_DIRECTIONS: Record<
   sinapsis: { up: true, down: true, left: true, right: true },
   sifon: { up: true, down: true, left: true, right: true },
   "2048": { up: true, down: true, left: true, right: true },
+};
+// Config de gestos por juego (spec 23), local como TOUCH_DIRECTIONS. Un juego
+// ausente de este mapa no tiene modo gestos: solo D-pad, sin toggle.
+type TouchMode = "gamepad" | "gestures";
+const GESTURE_CONFIG: Record<string, GestureMap> = {
+  "2048": {
+    up: "ArrowUp",
+    down: "ArrowDown",
+    left: "ArrowLeft",
+    right: "ArrowRight",
+  },
+  snake: {
+    up: "ArrowUp",
+    down: "ArrowDown",
+    left: "ArrowLeft",
+    right: "ArrowRight",
+  },
+  frogger: {
+    up: "ArrowUp",
+    down: "ArrowDown",
+    left: "ArrowLeft",
+    right: "ArrowRight",
+  },
+  tetris: {
+    left: "ArrowLeft",
+    right: "ArrowRight",
+    down: "Space",
+    tap: "ArrowUp",
+  },
 };
 export function JugarClient({ game }: { game: Game }) {
   const router = useRouter();
@@ -39,6 +72,9 @@ export function JugarClient({ game }: { game: Game }) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const skinStorageKey = `av_skin_${game.id}`;
   const [skin, setSkin] = useState(registered?.skins?.[0]?.id ?? "");
+  const gestureMap = GESTURE_CONFIG[game.id];
+  const touchModeStorageKey = `av_touch_mode_${game.id}`;
+  const [touchMode, setTouchMode] = useState<TouchMode>("gestures");
   const level = registered ? engineLevel : Math.floor(score / 2500) + 1;
   const name = user ? user.name : "INVITADO";
   useEffect(() => {
@@ -62,6 +98,15 @@ export function JugarClient({ game }: { game: Game }) {
     }
   }, [registered, skinStorageKey]);
   useEffect(() => {
+    // Lee la preferencia de modo táctil post-hidratación (mismo patrón que skin).
+    if (!gestureMap) return;
+    const stored = localStorage.getItem(touchModeStorageKey);
+    if (stored === "gamepad" || stored === "gestures") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTouchMode(stored);
+    }
+  }, [gestureMap, touchModeStorageKey]);
+  useEffect(() => {
     document.body.classList.add("is-jugar-screen");
     return () => document.body.classList.remove("is-jugar-screen");
   }, []);
@@ -69,6 +114,13 @@ export function JugarClient({ game }: { game: Game }) {
     setSkin(id);
     engineRef.current?.setSkin?.(id);
     localStorage.setItem(skinStorageKey, id);
+  };
+  const handleToggleTouchMode = () => {
+    setTouchMode((m) => {
+      const next: TouchMode = m === "gestures" ? "gamepad" : "gestures";
+      localStorage.setItem(touchModeStorageKey, next);
+      return next;
+    });
   };
   const handleStats = (stats: EngineStats) => {
     setScore(stats.score);
