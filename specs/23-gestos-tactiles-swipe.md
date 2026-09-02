@@ -1,6 +1,6 @@
 # 23 — Gestos táctiles (swipe) como alternativa al D-pad
 
-**Estado:** Approved
+**Estado:** Implemented
 **Depende de:** SPEC 07, SPEC 09, SPEC 12, SPEC 21
 **Fecha:** 2026-09-01
 
