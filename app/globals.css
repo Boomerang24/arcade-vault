@@ -1162,6 +1162,16 @@ a {
 .mobile-footer select {
   max-width: 120px;
 }
+.touch-gestures {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  display: none;
+  touch-action: none;
+}
+.touch-gestures.is-disabled {
+  pointer-events: none;
+}
 .touch-controls {
   position: relative;
   display: none;
@@ -1425,6 +1435,9 @@ a {
   }
   .touch-controls {
     display: flex;
+  }
+  .touch-gestures {
+    display: block;
   }
   .av-player {
     display: flex;
